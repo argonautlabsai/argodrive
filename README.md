@@ -8,6 +8,24 @@ role assignments are the ones used on the reference machine (a MacBook Pro
 M5 Max with three Thunderbolt 5 NVMe enclosures); adapt `K3_DIR` and the
 volume names to yours.
 
+## What they show
+
+Per-drive read throughput during one 200-token completion, all four drives
+sampled together at 100 ms by `k3-diskscope`, reduced to one-second windows:
+
+![Per-drive read throughput during a 200-token run](charts/read-timeline.svg)
+
+The same run reduced to median and peak draw per drive, against each drive's
+standalone ceiling measured with `k3-drive-ceiling.py` while the engine was
+idle — every drive at 88–100% of its own ceiling, which is why the read barrier
+rather than total bandwidth sets the decode speed:
+
+![Per-drive draw under the engine vs standalone ceiling](charts/drive-draw.svg)
+
+Both charts are produced from the sampler CSV and the ceiling tool's output by
+the chart script in the benchmark package
+([`argonautlabsai/deltafin`](https://github.com/argonautlabsai/deltafin/tree/main/k3-public-bench/results/charts)).
+
 | directory | tool | what it does |
 |---|---|---|
 | `monitor/` | `k3-diskscope.c` | 100 ms sampler of per-device read bytes and ops, RAM, CPU and GPU counters, to CSV. `cc -O2 -o k3-diskscope k3-diskscope.c -framework IOKit -framework CoreFoundation` |
