@@ -1,0 +1,1620 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>K3 — live SSD draw</title>
+<style>
+:root{--bg:#FAFAF8;--surf:#FFF;--sunk:#F1F2EF;--ink:#161B21;--ink2:#4B5560;--ink3:#7E8894;
+--rule:#E0E3E0;--acc:#C4703C;--int:#1F5F8B;--c:#C4703C;--b:#4A7C59;--a:#8E5572;--tot:#161B21}
+@media(prefers-color-scheme:dark){:root{--bg:#0E1216;--surf:#161B21;--sunk:#11151A;--ink:#E9ECEF;
+--ink2:#A6B0BA;--ink3:#76818C;--rule:#262E36;--acc:#E0925C;--int:#57A0D0;--c:#E0925C;--b:#74B189;
+--a:#C489AE;--tot:#E9ECEF}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-serif,Georgia,serif}
+.shell{max-width:1240px;margin:0 auto;padding:24px 20px 60px}
+h1{font-family:-apple-system,sans-serif;font-size:25px;letter-spacing:-.02em;font-weight:640;margin:0 0 3px}
+.meta{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;letter-spacing:.05em;
+color:var(--ink3);text-transform:uppercase;margin:0 0 16px}
+.wrap{display:grid;grid-template-columns:1fr 268px;gap:16px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.stack{display:flex;flex-direction:column;gap:12px}
+
+.dev{background:var(--surf);border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.dev.primary{border-color:var(--int)}
+.hd{display:flex;align-items:baseline;gap:12px;padding:10px 14px 8px}
+.hd .sw{width:16px;height:4px;border-radius:2px;align-self:center}
+.hd .n{font-family:-apple-system,sans-serif;font-size:14.5px;font-weight:640}
+.hd .role{font-family:-apple-system,sans-serif;font-size:11px;color:var(--ink3);letter-spacing:.04em;text-transform:uppercase}
+.hd .now{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;font-size:21px}
+.hd .sub{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--ink3)}
+canvas{width:100%;display:block}
+.util{height:5px;background:var(--rule)}
+.util i{display:block;height:100%;transition:width .3s}
+
+.cards{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surf);border:1px solid var(--rule);border-radius:3px;padding:11px 13px}
+.card .k{font-family:-apple-system,sans-serif;font-size:10.5px;letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink3)}
+.card .v{font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;font-size:24px;line-height:1.2}
+.card .s{font-size:11.5px;color:var(--ink3);margin-top:2px}
+.bar{height:5px;background:var(--rule);border-radius:3px;margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;transition:width .3s}
+button{font-family:-apple-system,sans-serif;font-size:12px;padding:4px 11px;border-radius:3px;
+border:1px solid var(--rule);background:var(--surf);color:var(--ink2);cursor:pointer}
+button:hover{color:var(--ink)}
+.note{font-size:13px;color:var(--ink3);margin-top:18px;max-width:74ch;line-height:1.55}
+/* --- tab bar --------------------------------------------------------- */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--rule);margin:0 0 18px}
+.tabs button{border:1px solid transparent;border-bottom:none;border-radius:3px 3px 0 0;
+margin-bottom:-1px;padding:7px 16px;font-size:13px;background:none}
+.tabs button.on{background:var(--surf);border-color:var(--rule);color:var(--ink);font-weight:640}
+/* --- csv export bar --------------------------------------------------- */
+.exportbar{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:0 0 14px;
+padding:10px 13px;background:var(--surf);border:1px solid var(--rule);border-radius:3px;
+font-family:-apple-system,sans-serif;font-size:12px}
+.exportbar strong{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.exportbar label{display:flex;align-items:center;gap:5px;color:var(--ink2)}
+.exportbar input[type=date],.exportbar select{font:inherit;font-size:12px;padding:3px 6px;
+border:1px solid var(--rule);border-radius:3px;background:var(--bg);color:var(--ink)}
+.exportbar select{max-width:260px}
+.exportbar button{font:inherit;font-size:12px;padding:4px 11px;border:1px solid var(--rule);
+border-radius:3px;background:var(--bg);color:var(--ink2);cursor:pointer}
+.exportbar button:hover{color:var(--ink);border-color:var(--ink3)}
+.exportbar button.primary{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:640}
+.exportbar #csv_count{margin-left:auto;font-variant-numeric:tabular-nums}
+/* --- stats pivot ----------------------------------------------------- */
+.blk{background:var(--surf);border:1px solid var(--rule);border-radius:3px;margin-bottom:14px}
+.blk>h3{font-family:-apple-system,sans-serif;font-size:14.5px;font-weight:640;margin:0;
+padding:11px 14px 9px;border-bottom:1px solid var(--rule);display:flex;align-items:baseline;gap:10px}
+.blk>h3 .c{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--ink3);margin-left:auto}
+.tw{overflow-x:auto}
+table.piv{border-collapse:collapse;width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+table.piv th{font-family:-apple-system,sans-serif;font-size:10px;letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink3);text-align:right;padding:8px 10px;font-weight:600;
+border-bottom:1px solid var(--rule);white-space:nowrap}
+table.piv th:first-child,table.piv td:first-child{text-align:left}
+table.piv th.l,table.piv td.l{text-align:left}
+table.piv td{padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;
+border-bottom:1px solid var(--sunk);white-space:nowrap}
+table.piv tr:last-child td{border-bottom:none}
+table.piv tr.base td{background:var(--sunk)}
+table.piv td.ov{font-size:11px;color:var(--ink3);max-width:290px;overflow:hidden;text-overflow:ellipsis}
+.up{color:var(--b);font-weight:640}.dn{color:var(--a);font-weight:640}
+table.piv tr.armrow{cursor:pointer}
+table.piv tr.armrow:hover td{background:var(--sunk)}
+table.piv tr.armrow td:first-child::before{content:"\25b8 ";color:var(--ink3);font-size:10px}
+table.piv tr.armrow.open td:first-child::before{content:"\25be "}
+.armdet{background:var(--sunk);font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+line-height:1.6;padding:12px 14px;white-space:pre-wrap;word-break:break-word}
+.armdet h4{font-family:-apple-system,sans-serif;font-size:10px;letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink3);margin:10px 0 4px;font-weight:600}
+.armdet h4:first-child{margin-top:0}
+.armdet .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:2px 16px}
+.armdet .ov{color:var(--acc)}
+.badge{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);
+border:1px solid var(--rule);border-radius:2px;padding:1px 5px;margin-left:6px}
+/* --- storage+memory split -------------------------------------------- */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.colhd{font-family:-apple-system,sans-serif;font-size:10.5px;letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink3);margin:0 0 8px 2px}
+.srow{background:var(--surf);border:1px solid var(--rule);border-radius:3px;margin-bottom:8px}
+.srow .h{display:flex;align-items:baseline;gap:8px;padding:8px 12px 4px}
+.srow .h .n{font-family:-apple-system,sans-serif;font-size:12.5px;font-weight:640}
+.srow .h .u{font-family:-apple-system,sans-serif;font-size:10px;color:var(--ink3);
+letter-spacing:.04em;text-transform:uppercase}
+.srow .h .v{margin-left:auto;font-family:ui-monospace,Menlo,monospace;
+font-variant-numeric:tabular-nums;font-size:15px}
+</style></head><body><div class="shell">
+<div class="tabs">
+  <button id="tb_live" class="on" onclick="showTab('live')">Live</button>
+  <button id="tb_stats" onclick="showTab('stats')">Stats</button>
+  <button id="tb_cmp" onclick="showTab('cmp')">Compare</button>
+  <button id="tb_split" onclick="showTab('split')">Storage + Memory</button>
+  <button id="tb_procs" onclick="showTab('procs')">Processes</button>
+  <button id="tb_experts" onclick="showTab('experts')">Expert map</button>
+  <button id="tb_sched" onclick="showTab('sched')">Scheduler</button>
+  <button id="tb_peak" onclick="showTab('peak')">Peak reader</button>
+  <button id="tb_bylayer" onclick="showTab('bylayer')">by Layer</button>
+</div>
+<div id="tab_bylayer" style="display:none">
+<h1>by Layer &mdash; which drive does each layer pass wait for?</h1>
+<p class="meta">One barrier = one expert tile (one layer pass). Bars are individual expert reads on each drive (start to landing);
+the pass can continue when the LAST drive lands. Source: a per-read trace (<code>K3_READ_TRACE</code>) of one arm.</p>
+<p class="meta">trace: <select id="bl_trace" onchange="loadByLayer(-1)"></select>
+&nbsp; barrier: <input id="bl_barrier" type="number" style="width:90px" onchange="loadByLayer(parseInt(this.value))">
+&nbsp; <button onclick="blStep(-1)">&larr; prev</button> <button onclick="blStep(1)">next &rarr;</button>
+&nbsp; <a id="bl_csv" href="#" onclick="window.open('/bylayer.csv?trace='+encodeURIComponent(document.getElementById('bl_trace').value));return false;">download CSV report</a>
+&nbsp; <span id="bl_info"></span></p>
+<div class="panel" style="margin-bottom:14px"><div id="bl_summary">no trace loaded</div></div>
+<div class="panel" style="margin-bottom:14px"><div class="k" id="bl_gtitle">Gantt</div><canvas id="bl_gantt" style="width:100%;height:170px"></canvas>
+<div class="s">colour = drive; solid = prefetch read, hatched = demand read, grey = legacy whole-file record; the red line marks the last landing</div></div>
+<div class="panel"><div class="k">every barrier of the run &mdash; colour of the drive that landed last, height = the extra wait for it (ms)</div>
+<canvas id="bl_strip" style="width:100%;height:120px" onclick="blPick(event)"></canvas>
+<div class="s" id="bl_stripinfo">click a column to open that barrier above</div></div>
+</div>
+<div id="tab_live">
+<h1>Live SSD draw &mdash; per device
+  <span id="stagebadge" style="font-size:13px;font-weight:600;padding:3px 10px;border-radius:12px;
+        background:#8884;vertical-align:middle;margin-left:10px">idle</span></h1>
+<p class="meta">200 ms bars · 120 s window · <span id="stamp">connecting…</span>
+&nbsp; <button onclick="fetch('/reset')">reset peaks</button>
+&nbsp; <button id="dcbtn" onclick="decodeOnly=!decodeOnly;localStorage.setItem('k3_decodeOnly',decodeOnly?'1':'0');applyDecode();draw()"></button>
+&nbsp; <button id="totbtn" onclick="showTotal=!showTotal;localStorage.setItem('k3_showTotal',showTotal?'1':'0');applyTotal();draw()"></button>
+&nbsp; <button id="scalebtn" onclick="shared=!shared;document.getElementById('scalebtn').textContent=shared?'scale: shared':'scale: per device';draw()">scale: per device</button></p>
+
+<div class="exportbar">
+  <strong>Export CSV &mdash; per-second telemetry</strong>
+  <label>from <input type="date" id="lv_from" onchange="csvCount('lv')"></label>
+  <label>to <input type="date" id="lv_to" onchange="csvCount('lv')"></label>
+  <select id="lv_block" onchange="csvCount('lv')"><option value="">all blocks</option></select>
+  <button onclick="csvPreset('lv','today')">today</button>
+  <button onclick="csvPreset('lv',7)">last 7d</button>
+  <button onclick="csvPreset('lv',30)">last 30d</button>
+  <button class="primary" onclick="saveCsv('lv')">Save CSV</button>
+  <span id="lv_count" class="meta"></span>
+</div>
+<p class="note" style="margin-top:-6px">One row per arm per second across the selected range:
+per-drive read GB/s (internal / K3A / K3B / K3C / total), CPU%, RAM used / available / free /
+inactive, Metal-GPU GiB, swap and GPU%. This is the sample-level data behind the graphs above &mdash;
+the Stats export carries only each arm&rsquo;s <em>peaks</em>, which cannot show <em>when</em>
+pressure occurred or which drive stalled. The two sources are joined by
+<strong>elapsed seconds from arm start, not a shared clock</strong>: <code>.sys</code> is 1&nbsp;Hz
+with no timestamp and the diskscope counters are 200&nbsp;ms with their own, and the harness starts
+them independently &mdash; so alignment is good for trends and up to ~1&nbsp;s out for claiming
+lead/lag between a memory event and a drive event. <code>drive_bins</code> shows how many 200&nbsp;ms
+samples backed each second, so thin bins are visible rather than implied. Drive columns are
+<strong>reads only</strong> &mdash; diskscope&rsquo;s separate write rows are not in the arm&rsquo;s
+<code>.map</code> and are skipped. Capped at 300 arms; over that the export refuses with a message
+rather than returning a silent prefix.</p>
+
+<div class="panel" id="stagepanel" style="margin-bottom:14px;display:none;border-color:var(--acc)">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Redistributing weights</span>
+    <span class="role" id="stageop"></span>
+    <span class="now" style="font-size:17px" id="stagepct"></span></div>
+  <div style="padding:2px 14px 14px">
+    <div style="height:10px;background:var(--rule);border-radius:5px;overflow:hidden">
+      <i id="stagebar" style="display:block;height:100%;background:var(--acc);width:0%;transition:width .4s"></i></div>
+    <div class="num" id="stagesub" style="font-size:12px;color:var(--ink3);margin-top:7px"></div>
+  </div></div>
+<div class="panel" id="distpanel" style="margin-bottom:14px">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Weights distribution</span>
+    <span class="role" id="distcfg"></span>
+    <span class="now" style="font-size:15px" id="disttot"></span></div>
+  <div style="padding:4px 14px 14px">
+    <div id="diststack" style="display:flex;gap:2px;height:34px;border-radius:3px;overflow:hidden"></div>
+    <div id="distlegend" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px"></div>
+  </div></div>
+<div class="panel" id="cpupanel" style="margin-bottom:14px">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Compute time</span>
+    <span class="role" id="phasearm">waiting for a run</span>
+    <span class="now" style="font-size:15px" id="phasespt">–</span></div>
+  <div style="padding:4px 14px 6px">
+    <div id="phasestack" style="display:flex;gap:2px;height:34px;border-radius:3px;overflow:hidden"></div>
+    <div id="phaselegend" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:12px"></div>
+  </div>
+  <canvas id="cv_phases" style="height:120px"></canvas>
+</div>
+<div class="panel" id="lastarmpanel" style="margin-bottom:14px;display:none">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Last arm</span>
+    <span class="role" id="lastarmname">—</span>
+    <span class="now" style="font-size:15px" id="lastarmspeed">–</span></div>
+  <div id="lastarmgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:6px 14px 12px"></div>
+</div>
+<div class="panel" id="summerpanel" style="margin-bottom:14px;display:none">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Summer pool</span>
+    <span class="role" id="summerstate">off</span>
+    <span class="now" style="font-size:15px" id="summerhitrate">–</span></div>
+  <div id="summergrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:6px 14px 12px"></div>
+</div>
+<div class="panel" id="burstpanel" style="margin-bottom:14px">
+  <div class="hd" style="padding:12px 14px 4px">
+    <span class="n">Burst — 10 ms</span>
+    <span class="role" id="burstinfo">max-in-bucket · last 10 s · all devices, shared axis</span>
+    <span style="margin-left:auto;display:flex;gap:8px">
+      <button onclick="fetch('/burstdump').then(r=>r.json()).then(j=>{document.getElementById('burstinfo').textContent='saved '+j.rows+' rows → '+j.saved})" style="font-size:11.5px">save 60 s snapshot</button>
+    </span></div>
+  <canvas id="cv_burst" style="height:150px;width:100%;display:block;padding:4px 14px 10px;box-sizing:border-box"></canvas>
+</div>
+<div class="wrap">
+  <div class="stack" id="stack"></div>
+  <div class="cards">
+    <div class="card"><div class="k">Total draw now</div><div class="v" id="cur">–</div>
+      <div class="bar"><i id="curbar" style="background:var(--acc)"></i></div>
+      <div class="s" id="curs">of 28.73 GB/s capability</div></div>
+    <div class="card"><div class="k">Peak this session</div><div class="v" id="pk">–</div>
+      <div class="bar"><i id="pkbar" style="background:var(--acc);opacity:.55"></i></div>
+      <div class="s" id="pks"></div></div>
+    <div class="card"><div class="k">CPU</div><div class="v" id="cpu">–</div>
+      <div class="bar"><i id="cpubar" style="background:var(--b)"></i></div></div>
+    <div class="card"><div class="k">GPU</div><div class="v" id="gpu">–</div>
+      <div class="bar"><i id="gpubar" style="background:var(--a)"></i></div>
+      <div class="s" id="gmem"></div></div>
+    <div class="card"><div class="k">RAM used</div><div class="v" id="ram">–</div>
+      <div class="bar"><i id="rambar" style="background:var(--int)"></i></div>
+      <div class="s" id="ramsub"></div></div>
+    <div class="card"><div class="k">GB / token</div><div class="v" id="gbtok">–</div>
+      <div class="s">draw x s/token — the objective</div></div>
+    <div class="card"><div class="k">tok/s <span style="text-transform:none">(last 10 s)</span></div><div class="v" id="tok10">–</div>
+      <div class="s" id="tokrun">run so far: –</div></div>
+    <div class="card"><div class="k">RAM available</div><div class="v" id="ramfree">–</div>
+      <div class="s" id="ramsub2">of 128 GiB</div></div>
+    <div class="card"><div class="k">RAM free <span style="text-transform:none">(raw)</span></div>
+      <div class="v" id="ramfreeraw">–</div>
+      <div class="bar"><i id="ramfreerawbar" style="background:var(--acc)"></i></div>
+      <div class="s" id="ramfreerawsub">pinned near 0 under load by design</div></div>
+    <div class="card"><div class="k">Spine in RAM</div>
+      <div class="v" id="spineram">–</div>
+      <div class="bar"><i id="spinerambar" style="background:var(--int)"></i></div>
+      <div class="s" id="spinesub">on SSD – · –/93 layers</div></div>
+  </div>
+</div>
+<p class="note">Each device has its own panel. Bars are instantaneous reads at 200&nbsp;ms; the three reference
+lines are <strong>peak</strong> (dotted, session maximum), <strong>avg</strong> (solid, mean over the
+visible window) and <strong>cap</strong> (dashed, measured cold capability). Bars above it are warm reads served from the enclosure&rsquo;s own DRAM cache &mdash;
+real bytes, not sustainable. &ldquo;Scale: per device&rdquo; sizes every panel to its own limit so you
+can read utilisation; switch to shared to compare absolute throughput.</p>
+</div><!-- /tab_live -->
+
+<div id="tab_stats" style="display:none">
+<h1>Test pivot &mdash; every arm, every block</h1>
+<p class="meta">from k3-soak-logs &middot; newest block first &middot;
+<span id="statstamp">loading…</span>
+&nbsp; <button onclick="loadStats(true)">refresh</button></p>
+
+<div class="exportbar">
+  <strong>Export CSV &mdash; arms + settings</strong>
+  <label>from <input type="date" id="csv_from" onchange="csvCount('csv')"></label>
+  <label>to <input type="date" id="csv_to" onchange="csvCount('csv')"></label>
+  <select id="csv_block" onchange="csvCount('csv')"><option value="">all blocks</option></select>
+  <button onclick="csvPreset('csv','today')">today</button>
+  <button onclick="csvPreset('csv',7)">last 7d</button>
+  <button onclick="csvPreset('csv',30)">last 30d</button>
+  <button onclick="csvPreset('csv','all')">all time</button>
+  <button class="primary" onclick="saveCsv('csv')">Save CSV</button>
+  <span id="csv_count" class="meta"></span>
+</div>
+
+<div id="statsbody"></div>
+<p class="note">One table per block, newest first. <strong>&Delta;</strong> is measured against that
+block&rsquo;s own baseline arm (shaded &mdash; the first control-looking arm, else the first arm).
+Deltas are computed <strong>within a block only</strong>: cross-block numbers in this project are not
+comparable, so they are never subtracted. <strong>acc</strong> is Qwen accepted/proposed. An arm with
+no <code>[stats]</code> line is marked <span class="badge">partial</span> &mdash; it was killed or
+crashed mid-run and its speed is not reported rather than being shown as zero.
+Memory columns are <strong>peak</strong> used / <strong>min</strong> available / <strong>peak</strong>
+GPU across the arm, never a mean &mdash; a mean over a window that includes the idle head and tail
+measures the sampler, not the engine. <strong>steady</strong> is decode with the first chunk excluded; <strong>tok/s</strong> fuses it with prefill and the cold spine load. That fixed cost is ~22.5% of a 40-token run and ~3% of a 200-token one, so the headline rate <em>dilutes every delta, and dilutes short arms hardest</em> &mdash; judge changes on <strong>steady</strong>. <strong>1st&nbsp;tok</strong> is time to the first <code>[stats]</code> line: with drafting ON that line covers a whole chunk, so it reads as time-to-first-chunk rather than to one token. It is not fixed overhead &mdash; it moved 22.6&nbsp;s&rarr;36.5&nbsp;s (+59%) from expert placement alone. <strong>Click any arm row</strong> to expand the settings
+that arm actually resolved &mdash; overrides, I/O, residency, drafting, the engine&rsquo;s own
+<code>[native]</code> declarations and its end-of-run counters. SSD <strong>draw act</strong> is the mean over samples above a
+0.5&nbsp;GB/s idle floor and <strong>duty</strong> is the share of samples above it &mdash; active-rate
+&times; duty, never mean-over-window: the same 846&nbsp;GB of reads reads as 5.66&nbsp;GB/s over 150&nbsp;s
+and 8.95&nbsp;GB/s over 95&nbsp;s. Per-device columns use each arm&rsquo;s own <code>.map</code>, because
+disk numbers change on every replug.</p>
+</div><!-- /tab_stats -->
+
+<div id="tab_cmp" style="display:none">
+<h1>Compare &mdash; arms of one block</h1>
+<p class="meta">block <select id="cmpsel" onchange="drawCmp()" style="font-family:inherit;font-size:11.5px"></select>
+&nbsp; <span id="cmpstamp"></span></p>
+<div id="cmpbody"></div>
+<p class="note">The <strong>variables</strong> column shows only the overrides that actually
+<em>differ</em> between the arms of this block &mdash; the single variable under test. Anything held
+constant across every arm is listed once under the table as the block&rsquo;s fixed base, so a
+confounded block (two things moving at once) is visible rather than hidden. &Delta; is against the
+shaded baseline arm. <span class="badge">partial</span> arms are shown but never used as the
+baseline and get no &Delta;.</p>
+</div><!-- /tab_cmp -->
+
+<div id="tab_split" style="display:none">
+<h1>Storage + Memory &mdash; one shared axis</h1>
+<p class="meta">120 s window &middot; scope clock &middot; <span id="splitstamp">connecting…</span></p>
+<div class="split">
+  <div>
+    <div class="colhd">Storage &mdash; GB/s per device</div>
+    <div id="split_ssd"></div>
+  </div>
+  <div>
+    <div class="colhd">Memory &mdash; GiB &amp; GPU %</div>
+    <div id="split_mem"></div>
+    <div class="srow"><div class="h"><span class="n">Composition</span>
+      <span class="u">stacked GiB</span><span class="v" id="mcomp_v">–</span></div>
+      <canvas id="mcomp" style="height:96px"></canvas>
+      <div id="mcomp_leg" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:8px 12px 12px"></div>
+    </div>
+  </div>
+</div>
+<p class="note">Both columns share the same 120&nbsp;s x-axis and the same clock, so vertical
+alignment is meaningful: a draw collapse that lines up with available RAM bottoming out is a
+memory-pressure stall, not a storage one. Memory had <strong>no time series at all</strong> on this
+page before &mdash; only instantaneous cards &mdash; which is why every hard failure this project has
+had (the uncapped-retain OOM, the 2026-08-29 jetsam event, and both kernel panics) was invisible
+here until after it happened. RAM available is <code>free + inactive + speculative</code>; macOS pins
+<code>free</code> near zero by design, so <code>free</code> alone understates headroom ~40&times;.</p>
+</div><!-- /tab_split -->
+
+<div id="tab_procs" style="display:none">
+<h1>Processes &mdash; top 10 by RAM</h1>
+<p class="meta">2 s refresh &middot; <span id="procstamp">loading…</span></p>
+<div class="blk"><h3>Memory attribution<span class="c" id="procattr"></span></h3>
+  <div style="padding:4px 14px 14px">
+    <div id="procstack" style="display:flex;gap:2px;height:34px;border-radius:3px;overflow:hidden"></div>
+    <div id="proclegend" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:12px"></div>
+  </div></div>
+<div class="blk"><h3>Top 10 processes<span class="c" id="proccount"></span></h3>
+  <div class="tw"><table class="piv"><thead><tr><th class="l">process</th><th>pid</th>
+  <th>RSS GiB</th><th>% of 128</th><th>CPU%</th></tr></thead>
+  <tbody id="procrows"></tbody></table></div></div>
+<p class="note"><strong>RSS is not the whole story for the engine.</strong> A process&rsquo;s RSS does
+<em>not</em> include the GPU-wired Metal allocations it owns, so deltafin&rsquo;s real footprint is at
+least its RSS <em>plus</em> its MPS pool &mdash; and on this host the MPS pool alone runs 38&ndash;48 GiB
+while its RSS sits far below that. Both are shown separately rather than added into a single fake
+total. <strong>Unattributed</strong> is everything <code>vm_stat</code> counts as used that no process
+RSS explains: file cache, kernel, and GPU-wired pages.</p>
+</div><!-- /tab_procs -->
+
+<div id="tab_experts" style="display:none">
+<h1>Expert map &mdash; which experts a generation actually touched</h1>
+<p class="meta">trace <select id="extrace" onchange="loadExperts(true)" style="font-family:inherit;font-size:11.5px"></select>
+&nbsp; <button onclick="loadExperts(true)">reload</button>
+&nbsp; highlight above <input id="exmin" type="number" value="300" min="2" step="10"
+   style="width:72px;font-family:inherit;font-size:11.5px" onchange="if(window.__ex)drawExperts(window.__ex)">x
+&nbsp; <span id="exstamp">loading…</span></p>
+<p class="meta"><b>Overlay — last 4 tests</b>: traces
+<input id="ex4traces" style="width:420px;font-family:inherit;font-size:11.5px"
+       placeholder="map-c1.jsonl,map-r1.jsonl,map-c2.jsonl,map-r2.jsonl">
+&nbsp; top <input id="ex4top" type="number" value="30" min="5" max="500" style="width:56px;font-family:inherit;font-size:11.5px">
+&nbsp; <button onclick="loadOverlay4()">draw overlay</button>
+&nbsp; <span id="ex4stamp"></span></p>
+<div class="blk"><h3>92 layers &times; 896 experts<span class="c" id="exdims"></span></h3>
+  <div style="padding:10px 14px 14px">
+    <canvas id="excanvas" style="height:560px;image-rendering:pixelated"></canvas>
+    <div id="exlegend" style="display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap"></div>
+  </div></div>
+<div class="blk"><h3>Reuse pivot<span class="c" id="expivotc"></span></h3>
+  <div class="tw"><table class="piv" id="expivot"></table></div>
+  <div id="exshared" style="padding:10px 14px 14px;font-size:12.5px;color:var(--ink3)"></div></div>
+<p class="note">Every cell is one <code>(layer, expert)</code> pair &mdash; rows are layers 1&ndash;92
+top to bottom, columns are expert ids 0&ndash;895. <strong>Grey</strong> means the expert was never
+routed during this generation. <strong>Pale</strong> means routed exactly once. <strong>Red</strong>
+means routed more than once, darkening on a log scale with the reuse count &mdash; those are the
+only cells a RAM cache can ever pay for, because an expert used once is a cache miss followed by
+an eviction. In the pivot below, <strong>repeats</strong> is the column that matters: a cache can
+only ever serve a route that is not the first touch, so repeats — not routes, and not expert
+count — is the ceiling on what any cache of that band could deliver. Counts come from the engine&rsquo;s own <code>--router-trace</code> JSONL, so this is
+what the router actually did, not a model of it.</p>
+</div><!-- /tab_experts -->
+
+<div id="tab_peak" style="display:none">
+<h1>Peak reader &mdash; 10 ms ticks, 10 s window, every peak shown</h1>
+<p class="meta">Raw 10 ms sampler ticks &mdash; <b>no decimation</b>, so a single-tick
+burst is never hidden. Each tick's <b>bytes are exact</b>; its sub-10 ms shape is
+not (that is the IOKit counter granularity &mdash; a 20 MB/1 ms spike and a
+20 MB/9 ms spike both read as one 20 MB tick). <span id="peakstamp"></span></p>
+<div id="peakcards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:14px"></div>
+<div class="blk"><h3>Per-tick MB &mdash; all drives, last 10 s<span class="c">largest tick marked</span></h3>
+  <div style="padding:10px 14px 14px"><canvas id="peakcanvas" style="height:300px"></canvas></div></div>
+<div class="blk"><h3>Per drive &mdash; separate charts, shared MB scale</h3>
+  <div id="peakgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;padding:10px 14px 14px"></div></div>
+</div>
+
+<div id="tab_sched" style="display:none">
+<h1>Scheduler &mdash; four drives, who is busy and at what capacity</h1>
+<p class="meta">live 1 s &middot; <span id="schedstamp">loading…</span></p>
+
+<div class="exportbar">
+  <strong>Export CSV &mdash; charged vs drawn</strong>
+  <label>from <input type="date" id="sc_from" onchange="csvCount('sc')"></label>
+  <label>to <input type="date" id="sc_to" onchange="csvCount('sc')"></label>
+  <select id="sc_block" onchange="csvCount('sc')"><option value="">all blocks</option></select>
+  <button onclick="csvPreset('sc','today')">today</button>
+  <button onclick="csvPreset('sc',7)">last 7d</button>
+  <button onclick="csvPreset('sc',30)">last 30d</button>
+  <button onclick="csvPreset('sc','all')">all time</button>
+  <button class="primary" onclick="saveCsv('sc')">Save CSV</button>
+  <span id="sc_count" class="meta"></span>
+</div>
+<p class="note" style="margin-top:-6px">One row per arm that actually ran the scheduler, carrying
+<strong>both sides</strong> per drive: what the clocks <em>charged</em>
+(<code>charged_*</code>, counts and shares), what the drives <em>did</em>
+(<code>drawn_gbs_*</code>, <code>drawn_pct_*</code>, <code>peak_gbs_*</code>), the model constants
+being steered on (<code>cost_us_*</code>, <code>cap_gbs_*</code>), and the divergence
+<code>gap_pp_*</code> in percentage points &mdash; positive meaning a drive was charged more than it
+carried. That gap is the reason this tab exists: every expert record is the same 17,547,264&nbsp;B,
+so charged share and drawn share should track. <strong>The full population says they do.</strong>
+The single arm that motivated this tab (K3C charged 23.5%, carrying 27.2%) does not generalise:
+across all 21 scheduler arms the divergence is a small <em>fixed offset</em> &mdash; internal
+&minus;1.21&nbsp;pp, K3C &minus;0.86, K3B +1.30, K3A +0.77 &mdash; and it does <em>not</em> track
+speed, which it would if a constant were mispriced:
+<code>correlation(tok_s, internal&nbsp;gap) = +0.056</code> across 0.3555&ndash;0.5827 tok/s. So this
+tab is now evidence the cost model is <em>not</em> the problem. The two arms with real divergence
+(<code>R_ON</code>, <code>SCHED_ON</code>, K3C &asymp;&minus;4.4&nbsp;pp) are the ones where the
+<em>layout</em> changed, and both were slower than their controls.
+<strong>Capability is suspect &mdash; but <code>cap_peak</code> cannot say which way.</strong> internal
+reports 12.72&nbsp;GB/s against a rated 11.68. A device cannot exceed its own ceiling, so either the
+rating is understated or the metric is aliased. <code>cap_peak</code> is the max over 200&nbsp;ms
+windows of byte deltas, bounded by device rate <em>and</em> duty cycle inside the window, so a drive
+whose bytes arrive in long contiguous bursts reports a higher &ldquo;peak&rdquo; than an equally fast
+drive with the same bytes spread thinner &mdash; and internal, carrying ~40% of traffic on one
+device, has the densest bursts. <strong>The symmetry is the point:</strong> if the metric is
+unreliable enough to show internal beating its ceiling, the enclosures&rsquo; &minus;6 to
+&minus;10% deficits are equally untrustworthy, and &ldquo;the constants are miscalibrated against
+the fastest device&rdquo; is <em>not</em> supported. Resolved by rerunning under
+<code>k3-diskscope</code> at 10&nbsp;ms with rolling 100&nbsp;ms maxima &mdash; precedent
+(2026-08-26) is that rolling-100&nbsp;ms lands on capability while single-tick overshoots through
+completion batching. Rated constants stay unpatched until then. Arms where the scheduler was present but disabled emit an all-zero
+<code>[mirror-split]</code> and are excluded &mdash; there is no charge to compare. Unlike the table
+above this export is <strong>not capped at 30 arms</strong>; the cap keeps the page light, and
+silently truncating a download would misrepresent the population.</p>
+
+<div class="blk"><h3>Live utilisation<span class="c" id="schedtot"></span></h3>
+  <div style="padding:6px 14px 14px" id="schedlive"></div></div>
+
+<div class="blk"><h3>Cost model the scheduler steers on</h3>
+  <div class="tw"><table class="piv" id="schedcost"></table></div>
+  <p class="note" style="margin:10px 14px 14px">Each clock is charged
+  <code>RECORD / bandwidth</code> per open and <strong>never drains</strong>, so ordering by it is
+  weighted round-robin over lifetime cost, not least-loaded dispatch. Its fixed point is
+  allocation proportional to bandwidth &mdash; which is optimal only if every drive is equally
+  utilised at the margin.</p></div>
+
+<div class="blk"><h3>Charged vs actually drawn<span class="c" id="schedn"></span></h3>
+  <div class="tw"><table class="piv" id="schedarms"></table></div></div>
+
+<p class="note"><strong>&Delta; is the diagnostic.</strong> <em>charged</em> is what the clocks
+believed they dispatched; <em>drawn</em> is what the drives actually moved. Every expert record is
+the same 17,547,264&nbsp;B, so with equal duty these should track. Where they diverge, the cost
+constant for that drive is wrong &mdash; it is derived from <em>sequential</em> bandwidth, and K3C is
+an SN8100 with DRAM while K3A/K3B are DRAM-less SN7100s, so their behaviour under random
+17.5&nbsp;MB reads need not follow the sequential ratio. A drive charged less than it draws is being
+over-scheduled.</p>
+</div><!-- /tab_sched -->
+<script>
+
+// ---- by Layer tab -----------------------------------------------------------
+let BL=null, BL_PATH='';
+const BLCOL={internal:'--int',White:'--c',Green:'--b',Yellow:'--a'};
+function blColor(d){ return getComputedStyle(document.documentElement).getPropertyValue(BLCOL[d]||'--ink3').trim()||'#888'; }
+function loadByLayerList(){
+  fetch('/bylayer_list').then(r=>r.json()).then(j=>{
+    const sel=document.getElementById('bl_trace'); const cur=sel.value;
+    sel.innerHTML=j.traces.map(t=>`<option value="${t.path}">${t.path.split('/').slice(-2).join('/')} (${t.mb} MB)</option>`).join('');
+    if(cur) sel.value=cur;
+    if(j.traces.length && !BL) loadByLayer(-1);
+  });
+}
+function loadByLayer(barrier){
+  const path=document.getElementById('bl_trace').value; if(!path) return;
+  document.getElementById('bl_info').textContent='loading…';
+  fetch('/bylayer?trace='+encodeURIComponent(path)+'&barrier='+barrier).then(r=>r.json()).then(j=>{
+    if(j.error){ document.getElementById('bl_info').textContent=j.error; return; }
+    BL=j; BL_PATH=path;
+    document.getElementById('bl_info').textContent=`${j.records} device records · ${j.barriers.length} barriers · pass span p50/p90 ${j.span_p50}/${j.span_p90} ms`+(j.has_prio?'':' · (old trace: no priority column, device records are whole files)');
+    document.getElementById('bl_summary').innerHTML='<table><thead><tr><th>drive</th><th>reads</th><th>GB</th><th>lands LAST on</th><th>extra wait when last p50 / p90 ms</th><th>total extra wait s</th><th>mean concurrent reads</th></tr></thead><tbody>'+
+      j.summary.map(r=>`<tr><td><span style="color:${blColor(r.dev)}">&#9632;</span> ${r.dev}</td><td>${r.reads}</td><td>${r.gb}</td><td><b>${r.last_pct}%</b> of passes</td><td>${r.wait_p50} / ${r.wait_p90}</td><td>${(r.wait_total_ms/1000).toFixed(1)}</td><td>${r.concurrency}</td></tr>`).join('')+'</tbody></table>';
+    if(j.gantt){ document.getElementById('bl_barrier').value=j.gantt.b; drawGantt(j.gantt); }
+    drawStrip(j.barriers);
+  });
+}
+function blStep(d){ const v=parseInt(document.getElementById('bl_barrier').value||'0'); loadByLayer(v+d); }
+function drawGantt(g){
+  const cv=document.getElementById('bl_gantt'); const r=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*r; cv.height=h*r; const x=cv.getContext('2d'); x.setTransform(r,0,0,r,0,0); x.clearRect(0,0,w,h);
+  const devs=['internal','White','Green','Yellow']; const rows=devs.length; const rowH=(h-22)/rows; const left=64;
+  const tmax=Math.max(1,...g.reads.map(q=>q.end)); const X=t=>left+(w-left-8)*t/tmax;
+  const byDev={}; g.reads.forEach(q=>(byDev[q.dev]=byDev[q.dev]||[]).push(q));
+  document.getElementById('bl_gtitle').textContent=`barrier ${g.b} · layer ${g.layer} · ${g.reads.length} reads · ${tmax.toFixed(1)} ms until the last landing`;
+  x.font='11px system-ui'; x.fillStyle='#888'; x.textAlign='left';
+  devs.forEach((d,i)=>{ const y0=i*rowH+4; x.fillStyle=blColor(d); x.fillText(d,4,y0+rowH/2+4);
+    const rs=(byDev[d]||[]).sort((a,b)=>a.start-b.start); const lanes=[];
+    rs.forEach(q=>{ let lane=lanes.findIndex(t=>t<=q.start); if(lane<0){lane=lanes.length; lanes.push(0);} lanes[lane]=q.end;
+      const lh=Math.max(2,(rowH-6)/Math.max(1,Math.min(12,lanes.length))); const y=y0+lane*lh;
+      x.globalAlpha=q.prio==='-'?0.35:(q.prio==='D'?0.6:0.9); x.fillStyle=q.prio==='-'?'#999':blColor(d);
+      x.fillRect(X(q.start),y,Math.max(1,X(q.end)-X(q.start)),Math.max(1,lh-1)); });
+    x.globalAlpha=1; });
+  x.strokeStyle='#d33'; x.lineWidth=1.5; x.beginPath(); x.moveTo(X(tmax),0); x.lineTo(X(tmax),h-18); x.stroke();
+  x.fillStyle='#888'; x.textAlign='center'; for(let k=0;k<=4;k++){ const t=tmax*k/4; x.fillText(t.toFixed(1)+' ms',X(t),h-4); }
+}
+function drawStrip(bars){
+  const cv=document.getElementById('bl_strip'); const r=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*r; cv.height=h*r; const x=cv.getContext('2d'); x.setTransform(r,0,0,r,0,0); x.clearRect(0,0,w,h);
+  if(!bars.length) return; const n=bars.length; const cw=Math.max(1,w/n); const wmax=Math.max(1,...bars.map(b=>b.wait_ms));
+  bars.forEach((b,i)=>{ x.fillStyle=blColor(b.last); const bh=Math.max(1,(h-14)*b.wait_ms/wmax); x.fillRect(i*cw,h-14-bh,Math.max(1,cw-0.2),bh); });
+  x.fillStyle='#888'; x.font='10px system-ui'; x.textAlign='left'; x.fillText('barrier 0',2,h-2); x.textAlign='right'; x.fillText('barrier '+bars[n-1].b+' · tallest = '+wmax.toFixed(1)+' ms',w-2,h-2);
+  cv._bars=bars; cv._cw=cw;
+}
+function blPick(ev){ const cv=document.getElementById('bl_strip'); if(!cv._bars) return; const i=Math.min(cv._bars.length-1,Math.floor(ev.offsetX/cv._cw)); loadByLayer(cv._bars[i].b); }
+
+function showTab(t){
+  for(const [id,btn] of [['tab_live','tb_live'],['tab_stats','tb_stats'],['tab_cmp','tb_cmp'],
+                         ['tab_split','tb_split'],['tab_procs','tb_procs'],
+                         ['tab_experts','tb_experts'],['tab_sched','tb_sched'],['tab_peak','tb_peak'],
+                         ['tab_bylayer','tb_bylayer']]){
+    const on = id==='tab_'+t;
+    document.getElementById(id).style.display=on?'':'none';
+    document.getElementById(btn).className=on?'on':'';
+  }
+  localStorage.setItem('k3_tab',t);
+  if(t==='stats'||t==='cmp') loadStats();
+  if(t==='procs') loadProcs();
+  if(t==='experts') loadExperts();
+  if(t==='sched'){ loadSched(); drawSchedLive(); }
+  if(t==='peak'){ drawPeak(); }
+  if(t==='bylayer'){ loadByLayerList(); }
+}
+
+// ---- Scheduler tab ------------------------------------------------------
+const SCAP={internal:11.68,White:7.08,Green:5.62,Yellow:5.80};
+const SCOL={internal:'--int',White:'--c',Green:'--b',Yellow:'--a'};
+function drawSchedLive(){
+  if(!D) return;
+  const cur=D.cur||{}, pk=D.peaks||{};
+  let tot=0,cap=0,h='';
+  for(const d of Object.keys(SCAP)){
+    const v=cur[d]||0, c=SCAP[d]; tot+=v; cap+=c;
+    const pctv=100*v/c;
+    h+='<div style="margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:10px">'+
+       '<span style="font-family:-apple-system,sans-serif;font-size:13px;font-weight:640;width:70px">'+d+'</span>'+
+       '<span style="font-family:ui-monospace,Menlo,monospace;font-size:15px">'+v.toFixed(2)+
+       '<span style="color:var(--ink3);font-size:11.5px"> / '+c.toFixed(2)+' GB/s</span></span>'+
+       '<span style="margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px">'+
+       pctv.toFixed(0)+'%</span>'+
+       '<span style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink3);width:74px;text-align:right">peak '+
+       (pk[d]||0).toFixed(1)+'</span></div>'+
+       '<div class="bar" style="height:8px"><i style="width:'+Math.min(100,pctv).toFixed(1)+
+       '%;background:var('+SCOL[d]+')"></i></div></div>';
+  }
+  document.getElementById('schedlive').innerHTML=h;
+  document.getElementById('schedtot').textContent=
+    tot.toFixed(2)+' of '+cap.toFixed(2)+' GB/s  ('+(100*tot/cap).toFixed(0)+'%)';
+  document.getElementById('schedstamp').textContent=
+    (100*tot/cap).toFixed(0)+'% of four-drive capability';
+}
+setInterval(()=>{if(localStorage.getItem('k3_tab')==='sched') drawSchedLive();},1000);
+function loadSched(){
+  fetch('/scheduler').then(r=>r.json()).then(j=>{
+    const cost=j.cost||{}, cap=j.cap||SCAP;
+    const totInv=Object.keys(cost).reduce((a,d)=>a+1/cost[d],0);
+    document.getElementById('schedcost').innerHTML=
+      '<thead><tr><th class="l">drive</th><th>cost &micro;s/record</th><th>implied GB/s</th>'+
+      '<th>measured capability</th><th>implied share</th></tr></thead><tbody>'+
+      Object.keys(cost).map(d=>'<tr><td class="l">'+d+'</td><td>'+cost[d]+'</td><td>'+
+        (17547264/cost[d]/1000).toFixed(2)+'</td><td>'+cap[d].toFixed(2)+'</td><td>'+
+        (100*(1/cost[d])/totInv).toFixed(1)+'%</td></tr>').join('')+'</tbody>';
+    const arms=j.arms||[];
+    document.getElementById('schedn').textContent=arms.length+' arms with the scheduler active';
+    const D4=['internal','White','Green','Yellow'];
+    document.getElementById('schedarms').innerHTML=
+      '<thead><tr><th class="l">arm</th><th>tok/s</th>'+
+      D4.map(d=>'<th>'+d+'<br><span style="font-weight:400;text-transform:none">chg / drawn / &Delta;</span></th>').join('')+
+      '</tr></thead><tbody>'+
+      arms.map(a=>{
+        const ct=D4.reduce((s,d)=>s+(a.charged[d]||0),0)||1;
+        const dt=D4.reduce((s,d)=>s+(a.drawn[d]||0),0)||1;
+        return '<tr><td class="l">'+esc(a.arm)+'<br><span style="font-size:10px;color:var(--ink3)">'+
+          esc(a.block)+'</span></td><td>'+(a.tok_s==null?'–':a.tok_s.toFixed(4))+'</td>'+
+          D4.map(d=>{
+            const c=100*(a.charged[d]||0)/ct, w=100*(a.drawn[d]||0)/dt, df=w-c;
+            const col=Math.abs(df)>=2?(df>0?'var(--a)':'var(--b)'):'var(--ink3)';
+            return '<td>'+c.toFixed(1)+'% / '+w.toFixed(1)+'% / <strong style="color:'+col+'">'+
+                   (df>0?'+':'')+df.toFixed(1)+'</strong></td>';
+          }).join('')+'</tr>';
+      }).join('')+'</tbody>';
+  }).catch(e=>{document.getElementById('schedstamp').textContent='failed: '+e;});
+}
+
+// ---- Expert map ---------------------------------------------------------
+const REC_BYTES=17547264;   // one expert record
+let exLoaded=false;
+// ---- 4-test overlay: top-N experts per test, one hue each, blends on overlap
+const EX4COLS = ['#4477dd','#dd8833','#33aa66','#aa55cc'];
+function loadOverlay4(){
+  const traces = document.getElementById('ex4traces').value.trim();
+  const top = document.getElementById('ex4top').value || 30;
+  if(!traces){ document.getElementById('ex4stamp').textContent='enter trace names'; return; }
+  document.getElementById('ex4stamp').textContent='loading…';
+  fetch('/expertmap4?traces='+encodeURIComponent(traces)+'&top='+top)
+    .then(r=>r.json())
+    .then(j=>{ window.__ex4=j; drawOverlay4(j); })
+    .catch(e=>{ document.getElementById('ex4stamp').textContent='fetch failed: '+e; });
+}
+function drawOverlay4(j){
+  const cv=document.getElementById('excanvas'), W=cv.clientWidth, H=560;
+  cv.width=W*2; cv.height=H*2;
+  const ctx=cv.getContext('2d'); ctx.scale(2,2);
+  ctx.fillStyle='#e8e6e1'; ctx.fillRect(0,0,W,H);
+  const cw=W/896, ch=H/92;
+  const seen={};
+  (j.tests||[]).forEach((t,ti)=>{
+    ctx.globalAlpha=0.55; ctx.fillStyle=EX4COLS[ti%4];
+    (t.cells||[]).forEach(([l,e,c])=>{
+      ctx.fillRect(e*cw, (l-1)*ch, Math.max(cw,1.2), Math.max(ch-0.6,1.2));
+      const k=l+'-'+e; seen[k]=(seen[k]||0)+1;
+    });
+  });
+  ctx.globalAlpha=1;
+  const multi=Object.values(seen).filter(n=>n>=2).length;
+  const all4=Object.values(seen).filter(n=>n>=(j.tests||[]).length && (j.tests||[]).length>1).length;
+  document.getElementById('exlegend').innerHTML=(j.tests||[]).map((t,ti)=>{
+    const shared=(t.cells||[]).filter(([l,e])=>seen[l+'-'+e]>=2).length;
+    return `<span style="display:inline-flex;align-items:center;gap:6px">
+      <i style="width:11px;height:11px;border-radius:2px;background:${EX4COLS[ti%4]};opacity:.75"></i>
+      <span style="font-size:12px">${t.name}${t.error?' ('+t.error+')':''} — top ${(t.cells||[]).length}, ${shared} shared</span></span>`;
+  }).join('') + `<span style="font-size:12px;color:var(--ink3)">· cells in ≥2 tests: <b>${multi}</b> · in all: <b>${all4}</b> (darker = overlap)</span>`;
+  document.getElementById('ex4stamp').textContent='overlay drawn';
+  document.getElementById('exstamp').textContent='OVERLAY MODE — pick a trace + reload for the classic map';
+}
+function loadExperts(force){
+  const sel=document.getElementById('extrace');
+  const stamp=document.getElementById('exstamp');
+  const go=()=>{
+    const t=sel.value;
+    if(!t){ stamp.textContent='no .jsonl traces found in the project root'; return; }
+    stamp.textContent='loading '+t+' …';
+    window.__ex4 = null;    // leaving overlay mode when a plain trace loads
+    fetch('/experts?trace='+encodeURIComponent(t))
+      .then(r=>r.json())
+      .then(j=>{ exLoaded=true; drawExperts(j); })
+      .catch(e=>{ stamp.textContent='experts fetch failed: '+e; });
+  };
+  if(!sel.options.length){
+    fetch('/traces').then(r=>r.json()).then(j=>{
+      const list=j.traces||[];
+      const cfos=list.filter(t=>/^cfo/i.test(t));
+      let opts=list.map(t=>'<option value="'+esc(t)+'">'+esc(t)+'</option>').join('');
+      if(cfos.length>1){
+        // Consolidated view first: counts SUMMED across every benchmark run.
+        opts='<option value="'+esc(cfos.join(','))+'">ALL '+cfos.length+
+             ' benchmark runs (consolidated)</option>'+opts;
+      }
+      sel.innerHTML=opts;
+      go();
+    }).catch(e=>{ stamp.textContent='trace list failed: '+e; });
+    return;
+  }
+  if(exLoaded&&!force) return;
+  go();
+}
+function gb(nExperts){ return (nExperts*REC_BYTES/1073741824); }
+function drawExperts(j){
+  window.__ex=j;                       // kept so the threshold can redraw
+  const stamp=document.getElementById('exstamp');
+  if(j.error){ stamp.textContent=j.error; return; }
+  const L=j.layers, E=j.experts, cells=j.cells||[];
+  stamp.textContent=j.steps+' tokens · '+j.used.toLocaleString()+' of '+
+    j.grid.toLocaleString()+' cells touched ('+(100*j.used/j.grid).toFixed(1)+'%) · '+
+    j.reused.toLocaleString()+' reused'+
+    (j.n_traces>1?(' · '+j.n_traces+' runs consolidated'):'');
+  // Cross-run overlap: of the cells touched, how many appear in all runs?
+  const SH=j.shared||{};
+  if(j.n_traces>1){
+    const tot=Object.values(SH).reduce((a,b)=>a+b,0)||1;
+    const parts=[];
+    for(let k=j.n_traces;k>=1;k--) if(SH[k])
+      parts.push(SH[k].toLocaleString()+' in '+k+'/'+j.n_traces+' ('+(100*SH[k]/tot).toFixed(1)+'%)');
+    document.getElementById('exshared').innerHTML='<strong>Cross-run overlap:</strong> '+parts.join(' · ');
+  } else document.getElementById('exshared').textContent='';
+  document.getElementById('exdims').textContent='max reuse '+j.max_count+'x';
+
+  const cv=document.getElementById('excanvas');
+  const h=cv.clientHeight||560;
+  cv.width=E; cv.height=L;                 // one device pixel per cell, upscaled by CSS
+  const x=cv.getContext('2d');
+  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
+  x.fillStyle=dark?'#242a31':'#dfe1de';    // never routed
+  x.fillRect(0,0,E,L);
+  const img=x.getImageData(0,0,E,L), d=img.data;
+  // Only cells at or above the threshold get colour. Everything below fades
+  // toward the grid grey, so the eye is not drawn to the long tail of experts
+  // that are routed a handful of times and can never repay a cache slot.
+  const MIN=Math.max(2,parseInt(document.getElementById('exmin').value||'300',10));
+  const lmin=Math.log(MIN), lmax=Math.log(Math.max(MIN+1,j.max_count));
+  let above=0;
+  for(const c of cells){
+    const layer=c[0], expert=c[1], n=c[2];
+    const px=((layer-1)*E+expert)*4;
+    if(px<0||px+3>=d.length) continue;
+    if(n<MIN){
+      // Below threshold: barely distinguishable from unrouted, darkening only
+      // slightly with count so the structure is still faintly readable.
+      const t=Math.min(1,Math.log(Math.max(1,n))/lmin);
+      const base=dark?36:223, tint=dark?26:24;
+      const g=Math.round(base+tint*t);
+      d[px]=g; d[px+1]=dark?g+6:g+2; d[px+2]=dark?g+13:g;
+    } else {
+      above++;
+      const f=Math.min(1,(Math.log(n)-lmin)/Math.max(1e-6,lmax-lmin));
+      d[px]=Math.round(252-72*f); d[px+1]=Math.round(150-130*f); d[px+2]=Math.round(140-122*f);
+    }
+    d[px+3]=255;
+  }
+  x.putImageData(img,0,0);
+  cv.style.width='100%'; cv.style.height=h+'px';
+
+  // ---- reuse pivot -----------------------------------------------------
+  const B=j.buckets||[], O=j.over||{}, TR=j.total_routes||1, GRID=j.grid||1;
+  const pct=(a,b)=>b?(100*a/b).toFixed(1)+'%':'–';
+  const band=b=>b.hi==null?('&ge;'+b.lo+'x'):(b.lo===b.hi?(b.lo+'x'):(b.lo+'&ndash;'+b.hi+'x'));
+  const row=(label,o,bold)=>{
+    const L2=bold?('<strong>'+label+'</strong>'):label;
+    return '<tr><td class="l">'+L2+'</td>'+
+      '<td>'+o.experts.toLocaleString()+'</td>'+
+      '<td>'+pct(o.experts,GRID)+'</td>'+
+      '<td>'+gb(o.experts).toFixed(1)+'</td>'+
+      '<td>'+(o.traffic_gib||0).toLocaleString()+'</td>'+
+      '<td><strong>'+(o.per_expert_gib||0).toFixed(3)+'</strong></td>'+
+      '<td>'+(o.cacheable_gib||0).toLocaleString()+'</td>'+
+      '<td>'+(o.repeats||0).toLocaleString()+'</td>'+
+      '<td>'+pct(o.routes||0,TR)+'</td></tr>';
+  };
+  let rows=B.map(b=>row('routed '+band(b),b,false)).join('');
+  rows+='<tr><td colspan="9" style="border-bottom:none;padding-top:14px;color:var(--ink3);'+
+        'font-family:-apple-system,sans-serif;font-size:10px;letter-spacing:.06em;'+
+        'text-transform:uppercase" class="l">cumulative &mdash; cache size needed to hold the band</td></tr>';
+  for(const n of [...Array.from({length:20},(_,i)=>i+1),50]) if(O[String(n)]) rows+=row('routed more than '+n+'x',O[String(n)],true);
+  document.getElementById('expivotc').textContent=TR.toLocaleString()+' routes total';
+  document.getElementById('expivot').innerHTML=
+    '<thead><tr><th class="l">band</th><th>experts</th><th>% of grid</th>'+
+    '<th>RAM GiB</th><th>traffic GiB</th><th>traffic/expert</th>'+
+    '<th>cacheable GiB</th><th>repeats</th><th>% of routes</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody>';
+
+  const sw=(c,t)=>'<span style="display:flex;align-items:center;gap:6px">'+
+    '<span style="width:14px;height:14px;border-radius:2px;background:'+c+'"></span>'+
+    '<span style="font-size:11.5px;color:var(--ink3)">'+t+'</span></span>';
+  document.getElementById('exlegend').innerHTML=
+    sw(dark?'#242a31':'#dfe1de','never routed')+
+    sw(dark?'rgb(86,96,106)':'rgb(186,190,186)','routed once')+
+    sw('rgb(252,150,140)','at threshold ('+MIN+'x)')+
+    sw('rgb(216,85,79)','mid')+
+    sw('rgb(180,20,18)','max '+j.max_count+'x')+
+    '<span style="font-size:11.5px;color:var(--ink3)">'+above.toLocaleString()+
+    ' cells at or above '+MIN+'x</span>';
+}
+
+// ---- Processes tab ------------------------------------------------------
+const PROC_COL=['--int','--c','--b','--a','--acc'];
+function loadProcs(){
+  fetch('/procs').then(r=>r.json()).then(j=>{
+    const top=j.top||[];
+    document.getElementById('procstamp').textContent=j.count+' processes · RAM used '+j.ram_used+' GiB';
+    document.getElementById('proccount').textContent=top.length+' shown';
+    document.getElementById('procrows').innerHTML=top.map(r=>
+      '<tr><td class="l" title="'+esc(r.full)+'">'+esc(r.name)+'</td><td>'+r.pid+'</td>'+
+      '<td>'+num(r.gib,2)+'</td><td>'+num(100*r.gib/128,1)+'%</td><td>'+num(r.cpu,1)+'</td></tr>').join('')
+      ||'<tr><td class="l">no data</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>';
+    // Attribution bar: engine RSS, engine GPU pool, other processes, unattributed.
+    const other=Math.max(0,top.reduce((a,b)=>a+b.gib,0)-j.engine_rss);
+    const segs=[['deltafin RSS',j.engine_rss,'--int'],['deltafin GPU pool',j.engine_mps,'--a'],
+                ['other top-10',other,'--b'],['unattributed (cache/kernel/GPU)',j.unattributed,'--acc']];
+    const tot=segs.reduce((a,b)=>a+b[1],0)||1;
+    document.getElementById('procattr').textContent=j.ram_used+' GiB used';
+    document.getElementById('procstack').innerHTML=segs.map(([n,v,c])=>
+      '<div style="width:'+(100*v/tot).toFixed(2)+'%;background:var('+c+')" title="'+n+' '+v+' GiB"></div>').join('');
+    document.getElementById('proclegend').innerHTML=segs.map(([n,v,c])=>
+      '<div style="display:flex;align-items:baseline;gap:7px"><span style="width:14px;height:4px;'+
+      'border-radius:2px;background:var('+c+')"></span><span style="font-size:11.5px;color:var(--ink3)">'+
+      n+'</span><span style="margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">'+
+      num(v,1)+' GiB</span></div>').join('');
+  }).catch(e=>{document.getElementById('procstamp').textContent='failed: '+e;});
+}
+setInterval(()=>{if(localStorage.getItem('k3_tab')==='procs') loadProcs();},2000);
+// Refresh the pivot while it is the visible tab, so a block landing mid-session
+// appears without a manual reload.
+setInterval(()=>{
+  const t=localStorage.getItem('k3_tab');
+  if(t==='stats'||t==='cmp') loadStats(true);
+},15000);
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function num(v,d){return v==null?'–':Number(v).toFixed(d);}
+let statsLoaded=false;
+// Always refetch. The one-shot guard meant the tab showed whatever existed when
+// it was first opened and never updated — arms finishing while you watched were
+// invisible, and an arm read MID-RUN stayed cached at its partial speed forever.
+// The server caches on (block, log count, newest mtime), so a no-change refetch
+// is cheap.
+/* ---- CSV export -------------------------------------------------------
+   The range filters on each arm's own `ran` timestamp, matching the server.
+   The count below the bar is computed from the SAME field the server filters
+   on, so the preview and the file can never disagree about how many arms are
+   in the export.
+   Both export bars (Stats settings, Live telemetry) share these functions via a
+   `pfx` element-id prefix so the two ranges stay independent but the filtering
+   logic cannot drift apart between them. */
+const LIVE_ARM_CAP=300;
+function csvISO(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+
+  '-'+String(d.getDate()).padStart(2,'0');}
+function csvPreset(pfx,p){
+  const f=document.getElementById(pfx+'_from'), t=document.getElementById(pfx+'_to');
+  if(p==='all'){f.value='';t.value='';}
+  else{
+    const end=new Date(); const start=new Date();
+    if(p!=='today') start.setDate(start.getDate()-(p-1));
+    f.value=csvISO(start); t.value=csvISO(end);
+  }
+  csvCount(pfx);
+}
+function csvSyncBlocks(B){
+  for(const pfx of ['csv','lv','sc']){
+    const sel=document.getElementById(pfx+'_block'); if(!sel) continue;
+    const cur=sel.value;
+    sel.innerHTML='<option value="">all blocks</option>'+
+      B.map(b=>'<option value="'+esc(b.block)+'">'+esc(b.block)+' ('+b.arms+')</option>').join('');
+    sel.value=cur;
+  }
+}
+function csvSelect(pfx){
+  const f=(document.getElementById(pfx+'_from')||{}).value||'',
+        t=(document.getElementById(pfx+'_to')||{}).value||'',
+        blk=(document.getElementById(pfx+'_block')||{}).value||'';
+  let arms=0, blocks=0, partial=0, undated=0;
+  for(const b of ((STATS||{}).blocks||[])){
+    if(blk&&b.block!==blk) continue;
+    let n=0;
+    for(const r of b.rows){
+      // The scheduler export only covers arms that actually RAN the scheduler:
+      // an arm with it disabled emits an all-zero [mirror-split] and has no
+      // charge to compare against draw, so counting it here would promise rows
+      // the download will not contain.
+      if(pfx==='sc'&&r.mirror!=='true') continue;
+      const day=(r.ran||'').slice(0,10);
+      // An arm with no readable mtime is EXPORTED, not silently dropped — the
+      // server does the same. It is counted separately so the number is honest.
+      if(!day){n++;undated++;if(r.incomplete)partial++;continue;}
+      if(f&&day<f) continue;
+      if(t&&day>t) continue;
+      n++; if(r.incomplete) partial++;
+    }
+    if(n){arms+=n;blocks++;}
+  }
+  return {f:f,t:t,blk:blk,arms:arms,blocks:blocks,partial:partial,undated:undated};
+}
+function csvCount(pfx){
+  const el=document.getElementById(pfx+'_count'); if(!el||!STATS) return;
+  const s=csvSelect(pfx);
+  let txt=s.arms+' arms · '+s.blocks+' blocks'+
+    (s.partial?' · '+s.partial+' partial':'')+(s.undated?' · '+s.undated+' undated':'');
+  // The telemetry export reads every 200 ms sample of every selected arm, so it
+  // states the cost BEFORE the click rather than hanging afterwards.
+  if(pfx==='lv'){
+    if(s.arms>LIVE_ARM_CAP) txt+=' · over '+LIVE_ARM_CAP+'-arm cap, narrow the range';
+    else txt+=' · ~'+Math.round(s.arms*300/1000)+'k rows';
+  }
+  el.textContent=txt;
+}
+function saveCsv(pfx){
+  const s=csvSelect(pfx);
+  if(pfx==='lv'&&s.arms>LIVE_ARM_CAP){
+    alert(s.arms+' arms selected; the telemetry export is capped at '+LIVE_ARM_CAP+
+      '.\nNarrow the date range or pick a single block.'); return;
+  }
+  const q=new URLSearchParams();
+  if(s.f)q.set('from',s.f); if(s.t)q.set('to',s.t); if(s.blk)q.set('block',s.blk);
+  const ep={lv:'/live.csv',sc:'/scheduler.csv'}[pfx]||'/stats.csv';
+  window.location=ep+(q.toString()?'?'+q:'');
+}
+
+function loadStats(force){
+  fetch('/stats').then(r=>r.json()).then(j=>{
+    statsLoaded=true; STATS=j;
+    const B=j.blocks||[];
+    const now=new Date().toTimeString().slice(0,8);
+    document.getElementById('statstamp').textContent=
+      B.length+' blocks · '+B.reduce((a,b)=>a+b.arms,0)+' arms · updated '+now;
+    csvSyncBlocks(B); csvCount('csv'); csvCount('lv'); csvCount('sc');
+    document.getElementById('statsbody').innerHTML=B.map(b=>{
+      const rows=b.rows.map(r=>{
+        let d='–';
+        if(r.delta_pct!=null&&!r.is_base)
+          d='<span class="'+(r.delta_pct>0?'up':'dn')+'">'+
+            (r.delta_pct>0?'+':'')+r.delta_pct.toFixed(2)+'%</span>';
+        return '<tr class="armrow'+(r.is_base?' base':'')+'" '+
+          'onclick="toggleArm(this,\''+esc(b.block)+'\',\''+esc(r.arm)+'\')">'+
+          '<td class="l">'+esc(r.arm)+(r.incomplete?'<span class="badge">partial</span>':'')+'</td>'+
+          '<td>'+(r.tok_s==null?'–':num(r.tok_s,4))+'</td>'+
+          // steady = decode with the first chunk excluded. The headline tok/s
+          // fuses prefill + cold spine load into the rate; that fixed cost is
+          // ~22.5% of a 40-token run and ~3% of a 200-token one, so it dilutes
+          // every delta and dilutes SHORT arms hardest.
+          '<td><strong>'+(r.tok_s_steady==null?'–':num(r.tok_s_steady,4))+'</strong></td>'+
+          '<td>'+(r.first_token_s==null?'–':num(r.first_token_s,1)+'s')+'</td>'+
+          '<td>'+(r.encode_share_pct==null?'–':num(r.encode_share_pct,1)+'%')+'</td>'+
+          '<td>'+(r.s_tok==null?'–':num(r.s_tok,3))+'</td>'+
+          '<td>'+(r.elapsed==null?'–':num(r.elapsed,1)+'s')+'</td>'+
+          '<td class="l" style="color:var(--ink3)">'+esc(r.ran||r.started||'–')+'</td>'+
+          '<td>'+d+'</td>'+
+          '<td>'+(r.generated==null?'–':r.generated)+'</td>'+
+          '<td>'+(r.chunks==null?'–':r.chunks)+'</td>'+
+          '<td>'+esc(r.drafts||'–')+'</td>'+
+          '<td>'+(r.accept==null?'–':r.accept+'%')+'</td>'+
+          '<td>'+(r.layer_passes==null?'–':r.layer_passes)+'</td>'+
+          '<td>'+(r.ram_peak==null?'–':num(r.ram_peak,1))+'</td>'+
+          '<td>'+(r.ram_avail_min==null?'–':num(r.ram_avail_min,1))+'</td>'+
+          '<td>'+(r.ram_free_min==null?'–':num(r.ram_free_min,1))+'</td>'+
+          '<td>'+(r.gpu_mem_peak==null?'–':num(r.gpu_mem_peak,1))+'</td>'+
+'<td>'+(r.feat_mirror==null?'–':((r.feat_mirror==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_mirror==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_retain==null?'–':((r.feat_retain==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_retain==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_summer==null?'–':((r.feat_summer==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_summer==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+    '<td>'+(r.feat_mirror==null?'–':((r.feat_mirror==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_mirror==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_retain==null?'–':((r.feat_retain==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_retain==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_summer==null?'–':((r.feat_summer==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_summer==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+      '<td>'+(r.gpu_pct_mean==null?'–':num(r.gpu_pct_mean,1)+'%')+'</td>'+
+          '<td>'+(r.gpu_idle_pct==null?'–':num(r.gpu_idle_pct,1)+'%')+'</td>'+
+          '<td>'+(r.gpu_pct_peak==null?'–':r.gpu_pct_peak+'%')+'</td>'+
+          '<td>'+(r.mem_spine_gib==null?'–':num(r.mem_spine_gib,1))+'</td>'+
+          '<td>'+(r.gpu_mem_mean==null?'–':num(r.gpu_mem_mean,1))+'</td>'+
+          '<td>'+(r.mem_retain_cap_gib==null?'–':r.mem_retain_cap_gib)+'</td>'+
+          '<td>'+(r.mem_metal_other_gib==null?'–':num(r.mem_metal_other_gib,1))+'</td>'+
+          '<td>'+(r.mem_host_other_gib==null?'–':num(r.mem_host_other_gib,1))+'</td>'+
+          '<td>'+(r.ssd_tot_act==null?'–':num(r.ssd_tot_act,2))+'</td>'+
+          '<td>'+(r.ssd_tot_peak==null?'–':num(r.ssd_tot_peak,2))+'</td>'+
+          '<td>'+(r.ssd_tot_duty==null?'–':r.ssd_tot_duty+'%')+'</td>'+
+          '<td>'+(r.ssd_internal_act==null?'–':num(r.ssd_internal_act,2))+'</td>'+
+          '<td>'+(r.ssd_Yellow_act==null?'–':num(r.ssd_Yellow_act,2))+'</td>'+
+          '<td>'+(r.ssd_Green_act==null?'–':num(r.ssd_Green_act,2))+'</td>'+
+          '<td>'+(r.ssd_White_act==null?'–':num(r.ssd_White_act,2))+'</td>'+
+          '<td class="ov l" title="'+esc(r.overrides)+'">'+esc(r.overrides||'—')+'</td>'+
+          '</tr>';}).join('');
+      return '<div class="blk"><h3>'+esc(b.block)+
+        '<span class="c">'+b.arms+' arms</span></h3><div class="tw">'+
+        '<table class="piv"><thead><tr><th class="l">arm</th><th>tok/s</th>'+
+        '<th>steady</th><th>1st&nbsp;tok</th><th>enc&nbsp;%</th><th>s/token</th>'+
+        '<th>&Delta;</th><th>gen</th><th>chunks</th><th>drafts</th><th>acc</th>'+
+        '<th>layer&nbsp;passes</th><th>ram&nbsp;peak</th><th>ram&nbsp;avail&nbsp;min</th>'+
+        '<th>mirror</th><th>retain</th><th>ram&nbsp;cache</th><th>gpu&nbsp;mem</th><th>gpu&nbsp;mean</th><th>gpu&nbsp;idle</th><th>gpu&nbsp;pk</th>'+
+        '<th>spine</th><th>metal&nbsp;mean</th><th>retain</th><th>metal&nbsp;other</th><th>host&nbsp;other</th>'+
+        '<th>draw&nbsp;act</th><th>draw&nbsp;peak</th><th>duty</th>'+
+        '<th>int</th><th>Yellow</th><th>Green</th><th>White</th>'+
+        '<th class="l">overrides</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody></table></div></div>';
+    }).join('')||'<p class="note">No blocks found under k3-soak-logs.</p>';
+    buildCmpSel();
+  }).catch(e=>{
+    document.getElementById('statstamp').textContent='failed: '+e;
+  });
+}
+
+// ---- Storage + Memory split -------------------------------------------
+// Rows share ONE x-axis derived from the scope clock, so the two columns can be
+// read vertically against each other. Each row is drawn to its own y-max
+// (utilisation view); the y-max is printed so absolute values stay recoverable.
+const SPLIT_SSD=[['internal','--int'],['White','--c'],['Green','--b'],['Yellow','--a']];  // volumes renamed 2026-09-05 (K3C=White, K3B=Green, K3A=Yellow)
+const SPLIT_MEM=[
+  ['RAM used','GiB','--int',1,128],['RAM available','GiB','--b',2,128],
+  ['GPU memory','GiB','--a',3,128],['GPU utilisation','%','--acc',4,100],
+  ['RAM free (raw)','GiB','--acc',6,128]];
+let splitBuilt=false;
+function buildSplit(){
+  document.getElementById('split_ssd').innerHTML=SPLIT_SSD.map(([k])=>
+    '<div class="srow"><div class="h"><span class="n">'+k+'</span>'+
+    '<span class="u">GB/s</span><span class="v" id="sv_'+k+'">–</span></div>'+
+    '<canvas id="sc_'+k+'" style="height:56px"></canvas></div>').join('');
+  document.getElementById('split_mem').innerHTML=SPLIT_MEM.map(([n,u],i)=>
+    '<div class="srow"><div class="h"><span class="n">'+n+'</span>'+
+    '<span class="u">'+u+'</span><span class="v" id="mv_'+i+'">–</span></div>'+
+    '<canvas id="mc_'+i+'" style="height:56px"></canvas></div>').join('');
+  splitBuilt=true;
+}
+function area(cv,pts,ymax,col,t0,t1){
+  if(!cv) return;
+  const r=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
+  cv.width=w*r; cv.height=h*r;
+  const x=cv.getContext('2d'); x.setTransform(r,0,0,r,0,0); x.clearRect(0,0,w,h);
+  const c=getComputedStyle(document.documentElement).getPropertyValue(col).trim()||'#888';
+  if(!pts.length||t1<=t0||ymax<=0) return;
+  const X=t=>(t-t0)/(t1-t0)*w, Y=v=>h-Math.max(0,Math.min(1,v/ymax))*h;
+  x.beginPath(); x.moveTo(X(pts[0][0]),h);
+  pts.forEach(p=>x.lineTo(X(p[0]),Y(p[1])));
+  x.lineTo(X(pts[pts.length-1][0]),h); x.closePath();
+  x.fillStyle=c; x.globalAlpha=.17; x.fill(); x.globalAlpha=1;
+  x.beginPath(); pts.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));
+  x.strokeStyle=c; x.lineWidth=1.4; x.stroke();
+}
+function drawSplit(){
+  if(!D) return;
+  if(!splitBuilt) buildSplit();
+  const mh=D.memhist||[];
+  // Shared axis across BOTH columns: union of the scope and memory time ranges.
+  let ts=[]; SPLIT_SSD.forEach(([k])=>(D.traces[k]||[]).forEach(p=>ts.push(p[0])));
+  mh.forEach(m=>ts.push(m[0]));
+  if(!ts.length){document.getElementById('splitstamp').textContent='waiting for samples';return;}
+  const t0=Math.min(...ts), t1=Math.max(...ts);
+  document.getElementById('splitstamp').textContent=
+    (t1-t0).toFixed(0)+' s span · '+mh.length+' memory samples';
+  SPLIT_SSD.forEach(([k,col])=>{
+    const pts=D.traces[k]||[];
+    const cap=(D.cap&&D.cap[k])||Math.max(0.1,...pts.map(p=>p[1]));
+    area(document.getElementById('sc_'+k),pts,cap,col,t0,t1);
+    const el=document.getElementById('sv_'+k);
+    if(el) el.textContent=pts.length?pts[pts.length-1][1].toFixed(2):'–';
+  });
+  // Stacked composition. NESTED not additive: the Metal pool already contains
+  // the resident spine, so the stack is metal-pool / host-side / available,
+  // each term a subtraction of measured quantities. Adding spine as a separate
+  // band on top of metal would double count by ~50 GiB.
+  (function(){
+    const cv=document.getElementById('mcomp'); if(!cv||!mh.length) return;
+    const r=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+    cv.width=w*r; cv.height=h*r;
+    const x=cv.getContext('2d'); x.setTransform(r,0,0,r,0,0); x.clearRect(0,0,w,h);
+    const cs=getComputedStyle(document.documentElement);
+    const col=n=>cs.getPropertyValue(n).trim()||'#888';
+    const X=t=>(t-t0)/((t1-t0)||1)*w, Y=v=>h-Math.max(0,Math.min(1,v/128))*h;
+    // bands, bottom-up: metal pool, host-side (used - metal), available
+    const bands=[['Metal pool (incl. spine)',m=>m[3],'--a'],
+                 ['host-side (RSS/cache/OS)',m=>Math.max(0,m[1]-m[3]),'--int'],
+                 ['available',m=>m[2],'--b']];
+    let base=mh.map(()=>0);
+    bands.forEach(([nm,f,c])=>{
+      x.beginPath();
+      mh.forEach((m,i)=>{const y=Y(base[i]+f(m)); i?x.lineTo(X(m[0]),y):x.moveTo(X(m[0]),y);});
+      for(let i=mh.length-1;i>=0;i--) x.lineTo(X(mh[i][0]),Y(base[i]));
+      x.closePath(); x.fillStyle=col(c); x.globalAlpha=.55; x.fill(); x.globalAlpha=1;
+      mh.forEach((m,i)=>base[i]+=f(m));
+    });
+    const last=mh[mh.length-1];
+    document.getElementById('mcomp_v').textContent=last[1].toFixed(1)+' used';
+    document.getElementById('mcomp_leg').innerHTML=bands.map(([nm,f,c])=>
+      '<div style="display:flex;align-items:baseline;gap:6px"><span style="width:12px;height:4px;'+
+      'border-radius:2px;background:var('+c+');opacity:.7"></span>'+
+      '<span style="font-size:11px;color:var(--ink3)">'+nm+'</span>'+
+      '<span style="margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px">'+
+      f(last).toFixed(1)+'</span></div>').join('');
+  })();
+  SPLIT_MEM.forEach(([n,u,col,idx,ymax],i)=>{
+    const pts=mh.map(m=>[m[0],m[idx]]);
+    area(document.getElementById('mc_'+i),pts,ymax,col,t0,t1);
+    const el=document.getElementById('mv_'+i);
+    if(el) el.textContent=pts.length?pts[pts.length-1][1].toFixed(u==='%'?0:1):'–';
+  });
+}
+
+// ---- per-arm settings, expanded on click --------------------------------
+// Sourced from the arm's OWN log. Several knobs never appear in the engine's
+// `[config] resolved:` line (K3_SPEC_DEPTH, K3_EXPERT_RETAIN, K3_SUMMER_POOL),
+// so the [native] lines are shown beside it — a setting in neither can only be
+// asserted by effect, which is what the counters block is for.
+const CFG_GROUPS=[
+  ['I/O',['expert_read_threads','expert_prefetch_threads','expert_backend','expert_scale4',
+          'spine_read_threads','spine_fd_cache','spine_stream_nocache','expert_stream_nocache']],
+  ['residency',['provider_resident_layers','spine_resident_bytes','expert_pin_bytes','expert_heat']],
+  ['drafting',['qwen','dspark','dspark_max_drafts','dspark_miss_tolerance','pilot_gate',
+               'pilot_gate_threshold','reasoning_effort']],
+  ['request',['max_new','chat','stats','surface','device','spine']],
+];
+function toggleArm(tr,block,arm){
+  const next=tr.nextElementSibling;
+  if(next && next.classList.contains('armdetrow')){ next.remove(); tr.classList.remove('open'); return; }
+  tr.classList.add('open');
+  const row=document.createElement('tr');
+  row.className='armdetrow';
+  const cells=tr.children.length;
+  row.innerHTML='<td colspan="'+cells+'" class="armdet">loading…</td>';
+  tr.parentNode.insertBefore(row,tr.nextSibling);
+  fetch('/arm?block='+encodeURIComponent(block)+'&arm='+encodeURIComponent(arm))
+    .then(r=>r.json()).then(j=>{
+      if(j.error){ row.firstChild.textContent=j.error; return; }
+      const c=j.config||{};
+      let h='';
+      if(j.overrides&&j.overrides.length)
+        h+='<h4>overrides passed to this arm</h4><div class="ov">'+
+           j.overrides.map(esc).join('  ')+'</div>';
+      if(j.prompt) h+='<h4>prompt</h4>'+esc(j.prompt);
+      for(const [name,keys] of CFG_GROUPS){
+        const have=keys.filter(k=>c[k]!==undefined);
+        if(!have.length) continue;
+        h+='<h4>'+name+'</h4><div class="kv">'+
+           have.map(k=>'<span>'+esc(k)+' = <strong>'+esc(c[k])+'</strong></span>').join('')+'</div>';
+      }
+      const shown=new Set(CFG_GROUPS.flatMap(g=>g[1]));
+      const rest=Object.keys(c).filter(k=>!shown.has(k));
+      if(rest.length)
+        h+='<h4>other resolved</h4><div class="kv">'+
+           rest.map(k=>'<span>'+esc(k)+' = '+esc(c[k])+'</span>').join('')+'</div>';
+      if(j.native&&j.native.length)
+        h+='<h4>engine declared</h4>'+j.native.map(esc).join('\n');
+      const t=j.counters||{};
+      if(Object.keys(t).length)
+        h+='<h4>counters</h4>'+Object.values(t).map(esc).join('\n');
+      row.firstChild.innerHTML=h;
+    }).catch(e=>{ row.firstChild.textContent='failed: '+e; });
+}
+
+// ---- Compare tab -------------------------------------------------------
+let STATS=null;
+function buildCmpSel(){
+  if(!STATS) return;
+  const sel=document.getElementById('cmpsel');
+  const keep=sel.value;
+  sel.innerHTML=STATS.blocks.map(b=>'<option value="'+esc(b.block)+'">'+esc(b.block)+
+    ' ('+b.arms+')</option>').join('');
+  if(keep&&STATS.blocks.some(b=>b.block===keep)) sel.value=keep;
+  drawCmp();
+}
+function drawCmp(){
+  if(!STATS) return;
+  const name=document.getElementById('cmpsel').value;
+  const b=STATS.blocks.find(x=>x.block===name);
+  if(!b){document.getElementById('cmpbody').innerHTML='';return;}
+  // Split each arm's overrides into KEY=VAL tokens, then partition into those
+  // that vary across arms (the variables under test) and those that do not
+  // (the block's fixed base). A block where more than one key varies is
+  // CONFOUNDED and must say so rather than quietly presenting a delta.
+  const toks=b.rows.map(r=>new Set((r.overrides&&r.overrides!=='—'?r.overrides:'').split(/\s+/).filter(Boolean)));
+  const keys=new Set(); toks.forEach(s=>s.forEach(t=>keys.add(t.split('=')[0])));
+  const varying=[],fixed=[];
+  keys.forEach(k=>{
+    const vals=new Set(toks.map(s=>[...s].find(t=>t.split('=')[0]===k)||'(unset)'));
+    (vals.size>1?varying:fixed).push(k);
+  });
+  // A block mixing token counts cannot be compared on tok/s at all: the same
+  // config measures ~25% faster at 40 tokens than at 200 (warmup amortised over
+  // 5x fewer tokens, and the drafter sees the easy head of the text). Flag it
+  // loudly rather than letting two rungs sit in one delta column.
+  const rungs=new Set(b.rows.filter(r=>r.generated!=null).map(r=>r.generated));
+  const rungMix=rungs.size>1;
+  const rows=b.rows.map((r,i)=>{
+    const v=varying.map(k=>([...toks[i]].find(t=>t.split('=')[0]===k)||k+'=off')).join(' ')||'—';
+    let d='–';
+    if(r.delta_pct!=null&&!r.is_base)
+      d='<span class="'+(r.delta_pct>0?'up':'dn')+'">'+(r.delta_pct>0?'+':'')+r.delta_pct.toFixed(2)+'%</span>';
+    return '<tr'+(r.is_base?' class="base"':'')+'>'+
+      '<td class="l">'+esc(r.arm)+(r.incomplete?'<span class="badge">partial</span>':'')+'</td>'+
+      '<td class="l" style="color:var(--acc)">'+esc(v)+'</td>'+
+      '<td>'+(r.tok_s==null?'–':num(r.tok_s,4))+'</td>'+
+      '<td'+(rungMix?' style="color:var(--a);font-weight:640"':'')+'>'+
+        (r.generated==null?'–':r.generated)+'</td>'+
+      '<td>'+d+'</td>'+
+      '<td>'+(r.elapsed==null?'–':num(r.elapsed,1)+'s')+'</td>'+
+      '<td class="l" style="color:var(--ink3)">'+esc(r.ran||r.started||'–')+'</td>'+
+      '<td>'+(r.chunks==null?'–':r.chunks)+'</td>'+
+      '<td>'+esc(r.drafts||'–')+'</td>'+
+      '<td>'+(r.ram_peak==null?'–':num(r.ram_peak,1))+'</td>'+
+      '<td>'+(r.ram_avail_min==null?'–':num(r.ram_avail_min,1))+'</td>'+
+      '<td>'+(r.ram_free_min==null?'–':num(r.ram_free_min,1))+'</td>'+
+      '<td>'+(r.gpu_mem_peak==null?'–':num(r.gpu_mem_peak,1))+'</td>'+
+'<td>'+(r.feat_mirror==null?'–':((r.feat_mirror==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_mirror==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_retain==null?'–':((r.feat_retain==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_retain==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+'<td>'+(r.feat_summer==null?'–':((r.feat_summer==="true")?'<strong style="color:var(--b)">ON</strong>':((r.feat_summer==="absent")?'<span style="color:var(--a)">absent</span>':'off')))+'</td>'+      '<td>'+(r.gpu_pct_mean==null?'–':num(r.gpu_pct_mean,1)+'%')+'</td>'+
+      '<td>'+(r.gpu_idle_pct==null?'–':num(r.gpu_idle_pct,1)+'%')+'</td>'+
+      '<td>'+(r.ssd_tot_act==null?'–':num(r.ssd_tot_act,2))+'</td>'+
+      '<td>'+(r.ssd_tot_peak==null?'–':num(r.ssd_tot_peak,2))+'</td>'+
+      '<td>'+(r.ssd_tot_duty==null?'–':r.ssd_tot_duty+'%')+'</td></tr>';}).join('');
+  const rungWarn = rungMix
+    ? '<p class="note" style="color:var(--a)"><strong>MIXED RUNGS:</strong> arms in this block '+
+      'generated different token counts ('+[...rungs].sort((x,y)=>x-y).join(', ')+'). tok/s is '+
+      'not comparable across rungs — the same config measures ~25% faster at 40 tokens than at '+
+      '200. Compare only arms with the same rung.</p>' : '';
+  const warn = varying.length>1
+    ? '<p class="note" style="color:var(--a)"><strong>CONFOUNDED:</strong> '+varying.length+
+      ' overrides vary across these arms ('+varying.map(esc).join(', ')+
+      '). A delta here cannot be attributed to any one of them.</p>' : '';
+  document.getElementById('cmpstamp').textContent=
+    varying.length===1?('variable: '+varying[0]):(varying.length+' variables');
+  document.getElementById('cmpbody').innerHTML=
+    '<div class="blk"><h3>'+esc(b.block)+'<span class="c">'+b.arms+' arms</span></h3>'+
+    '<div class="tw"><table class="piv"><thead><tr><th class="l">arm</th>'+
+    '<th class="l">variables</th><th>tok/s</th><th>rung</th><th>&Delta;</th><th>elapsed</th><th class="l">ran&nbsp;at</th><th>chunks</th><th>drafts</th>'+
+    '<th>ram&nbsp;peak</th><th>ram&nbsp;avail&nbsp;min</th><th>free&nbsp;min</th><th>mirror</th><th>retain</th><th>ram&nbsp;cache</th>'+
+    '<th>gpu&nbsp;mem</th><th>gpu&nbsp;mean</th><th>gpu&nbsp;idle</th>'+
+    '<th>draw&nbsp;act</th><th>draw&nbsp;peak</th><th>duty</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div></div>'+rungWarn+warn+
+    '<p class="note">Fixed base for every arm in this block: <code>'+
+    (fixed.length?fixed.map(esc).join(', '):'champion defaults only')+'</code></p>';
+}
+const DEVS=[
+ {k:'internal',role:'internal SSD · hot tier',col:'--int',primary:true},
+ {k:'White',role:'SN8100 1 TB · TB5 direct',col:'--c'},
+ {k:'Green',role:'SN8100 2 TB · TB5 direct',col:'--b'},
+ {k:'Yellow',role:'SN7100 · TB5 via hub (80 Gb/s) · primary root',col:'--a'},
+ {k:'TOTAL',role:'all four devices',col:'--tot'}];
+let D=null, shared=false, built=false;
+// TOTAL panel is a derived sum, not a device; hiding it keeps the four real
+// drives on one screen. Persisted so the choice survives a reload.
+let showTotal=localStorage.getItem('k3_showTotal')!=='0';
+// Exclude the spine load-in burst (everything before the run's first decoded
+// chunk) from the charts and from peak/avg. The spine streams ~50 GiB from
+// DELTAFIN_ROOT on K3A at every process start, which inflates that one drive
+// and makes short runs look K3A-heavy: 24.5% of reads at 10 tokens vs 18.1%
+// at 200. Decode-only is the honest steady-state view.
+let decodeOnly=localStorage.getItem('k3_decodeOnly')==='1';
+// Drive order + colour map for the weights-distribution panel. These were
+// referenced but never declared, so tick() threw ReferenceError the moment a
+// run put data in D.dist -- aborting the redraw exactly while a run was in
+// flight, which is when the page is actually being watched.
+const ORDER=['internal','White','Green','Yellow'];
+// Trim a [t,v] series to samples at/after the current run's first decoded
+// chunk. Returns the series untouched when the filter is off or no run is
+// in flight, so an idle dashboard still shows everything.
+function trim(ser){
+  if(!decodeOnly) return ser;
+  const ds=(D&&D.phases&&D.phases.decode_start)||0;
+  if(!ds) return ser;
+  return ser.filter(p=>p[0]>=ds);
+}
+const COL={internal:'--int',White:'--c',Green:'--b',Yellow:'--a'};
+// Compute phases, plotted as RATES (ms/chunk) not cumulative totals.
+const PH=[['attention_resident','attention','--int'],
+          ['expert_demand_read','demand read','--c'],
+          ['expert_plan','expert plan','--b'],
+          ['expert_read_prefetch','prefetch (overlapped)','--a'],
+          ['bind_upload','bind/upload','--tot'],
+          ['read_wait','read wait','--acc']];
+function build(){
+  document.getElementById('stack').innerHTML=DEVS.map(d=>`
+   <div class="dev${d.primary?' primary':''}" id="dev_${d.k}">
+     <div class="hd"><i class="sw" style="background:var(${d.col})"></i>
+       <span class="n">${d.k}</span><span class="role">${d.role}</span>
+       <span class="now" id="now_${d.k}">–</span></div>
+     <div class="hd" style="padding:0 14px 6px"><span class="sub" id="sub_${d.k}"></span></div>
+     <canvas id="cv_${d.k}" style="height:${d.k==='TOTAL'?104:132}px"></canvas>
+     <div class="util"><i id="ut_${d.k}" style="background:var(${d.col})"></i></div>
+   </div>`).join('');
+  built=true;
+  applyTotal();
+  applyDecode();
+}
+function applyDecode(){
+  const b=document.getElementById('dcbtn');
+  if(b) b.textContent=decodeOnly?'decode only':'incl. spine load';
+}
+function applyTotal(){
+  const el=document.getElementById('dev_TOTAL');
+  if(el) el.style.display=showTotal?'':'none';
+  const b=document.getElementById('totbtn');
+  if(b) b.textContent=showTotal?'total: shown':'total: hidden';
+}
+async function tick(){
+  try{ D=await (await fetch('/data',{cache:'no-store'})).json(); }catch(e){ return; }
+  if(!built) build();
+  const s=D.sys, capTot=Object.values(D.cap).reduce((a,b)=>a+b,0);
+  const alive=!D.health||D.health.scope;
+  const stampEl=document.getElementById('stamp');
+  stampEl.textContent=alive?'live':'SAMPLER DOWN';
+  stampEl.style.color=alive?'':'#e5484d';
+  const set=(id,html)=>{const e=document.getElementById(id); if(e) e.innerHTML=html;};
+  set('cur',D.cur_total.toFixed(2)+'<span style="font-size:12px;color:var(--ink3)"> GB/s</span>');
+  document.getElementById('curbar').style.width=Math.min(100,100*D.cur_total/capTot)+'%';
+  set('curs',(100*D.cur_total/capTot).toFixed(0)+'% of '+capTot.toFixed(2)+' GB/s capability');
+  set('pk',(D.peaks.TOTAL||0).toFixed(2)+'<span style="font-size:12px;color:var(--ink3)"> GB/s</span>');
+  document.getElementById('pkbar').style.width=Math.min(100,100*(D.peaks.TOTAL||0)/capTot)+'%';
+  set('pks',(100*(D.peaks.TOTAL||0)/capTot).toFixed(0)+'% of capability');
+  set('cpu',s.cpu.toFixed(0)+'<span style="font-size:12px;color:var(--ink3)">%</span>');
+  document.getElementById('cpubar').style.width=Math.min(100,s.cpu/16)+'%';
+  set('gpu',s.gpu.toFixed(0)+'<span style="font-size:12px;color:var(--ink3)">%</span>');
+  document.getElementById('gpubar').style.width=Math.min(100,s.gpu)+'%';
+  set('gmem',s.gmem.toFixed(1)+' GB in use');
+  // used = active+wired+compressor; available = free+inactive+speculative.
+  // The GPU figure is a SUBSET of used, shown for attribution — never added.
+  set('ram',(s.ram||0).toFixed(1)+'<span style="font-size:12px;color:var(--ink3)"> GiB</span>');
+  document.getElementById('rambar').style.width=Math.min(100,100*(s.ram||0)/128)+'%';
+  const spm=((D.phases||{}).spine_ram_gib||0);
+  set('ramsub',`engine ${((s.ram_engine||0)+(s.ram_mps||0)+spm).toFixed(1)} (${(s.ram_engine||0).toFixed(1)} proc + ${(s.ram_mps||0).toFixed(1)} GPU + ${spm.toFixed(1)} spine mapped) · rest ${Math.max(0,(s.ram_system||0)-spm).toFixed(1)} · ${(100*(s.ram||0)/128).toFixed(0)}% of 128`);
+  const av=(s.ram_avail!=null?s.ram_avail:128);
+  set('ramfree',av.toFixed(1)+'<span style="font-size:12px;color:var(--ink3)"> GiB</span>');
+  // Raw `Pages free`, read from memhist rather than sys so this needs no server
+  // restart. free is NOT headroom — macOS pins it near zero and parks
+  // reclaimable cache in inactive — but it is the leading indicator, so it is
+  // shown beside available rather than instead of it.
+  const mhh=(D.memhist||[]);
+  if(mhh.length && mhh[mhh.length-1].length>6){
+    const fr=mhh[mhh.length-1][6];
+    set('ramfreeraw',fr.toFixed(1)+'<span style="font-size:12px;color:var(--ink3)"> GiB</span>');
+    const b=document.getElementById('ramfreerawbar'); if(b) b.style.width=(100*fr/128).toFixed(1)+'%';
+    const ph=(D.phases||{});
+    if(ph.spine_ram_gib!=null){
+      set('spineram',ph.spine_ram_gib.toFixed(1)+'<span style="font-size:12px;color:var(--ink3)"> GiB</span>');
+      const sb=document.getElementById('spinerambar'); if(sb) sb.style.width=(100*ph.spine_ram_gib/50.74).toFixed(1)+'%';
+      set('spinesub','on SSD '+ph.spine_ssd_gib.toFixed(1)+' GiB · '+ph.spine_resident+' layers resident');
+    }
+    const spine=(ph.spine_ram_gib!=null)
+      ? ' · spine in RAM '+ph.spine_ram_gib.toFixed(1)+' GiB, on SSD '+ph.spine_ssd_gib.toFixed(1)+' GiB ('+ph.spine_resident+' layers)'
+      : '';
+    set('ramfreerawsub', (fr<1
+      ? 'pinned at ~0 — '+(av-fr).toFixed(1)+' GiB reclaimable in inactive'
+      : 'of 128 GiB · '+(av-fr).toFixed(1)+' GiB more in inactive')+spine);
+  }
+  // ---- compute panel ----
+  const P=D.phases||{}; const pt=P.per_tok||{};
+  const M=P.meta||{}; const blk=(M.out||'').split('/').pop();
+  const sb=document.getElementById('stagebadge');
+  if(sb){ const st=P.stage||'idle';
+    sb.textContent = st==='decode' ? `DECODE · chunk ${P.chunks}` : st.toUpperCase();
+    sb.style.background = st==='decode' ? '#2e7d3266' : (st==='prefill/encode' ? '#e6a11766' : '#8884');
+  }
+  set('phasearm', P.active
+    ? `${P.arm}${blk?' · '+blk:''}${M.tokens?' · '+M.tokens+' tok':''} · chunk ${P.chunks}${M.overrides?' · '+M.overrides:''}`
+    : (M.state==='done' ? `last: ${P.arm||'—'}${blk?' · '+blk:''} · rc=${M.rc}` : 'no run in flight'));
+  set('phasespt', P.spt ? P.spt.toFixed(3)+'<span style="font-size:12px;color:var(--ink3)"> s/token</span>' : '–');
+  set('gbtok', P.gb_tok ? P.gb_tok.toFixed(1) : '–');
+  set('tok10', (P.active && P.tok10) ? P.tok10.toFixed(3) : '–');
+  set('tokrun', (P.tok_run ? 'run so far: '+P.tok_run.toFixed(4)+' tok/s' : 'run so far: –') + (P.active ? '' : ' (idle)'));
+  const psum=PH.reduce((a,[k])=>a+(pt[k]||0),0);
+  if(psum>0){
+    document.getElementById('phasestack').innerHTML=PH.map(([k,lab,c])=>{
+      const v=pt[k]||0, pc=100*v/psum;
+      return pc<0.5?'':`<div title="${lab}: ${(v*1000).toFixed(0)} ms"
+        style="width:${pc}%;background:var(${c});display:flex;align-items:center;justify-content:center;
+        color:#fff;font-family:ui-monospace,monospace;font-size:11.5px">${pc>8?pc.toFixed(0)+'%':''}</div>`;
+    }).join('');
+    document.getElementById('phaselegend').innerHTML=PH.map(([k,lab,c])=>
+      `<div style="display:flex;align-items:center;gap:7px">
+        <i style="width:9px;height:9px;border-radius:2px;background:var(${c})"></i>
+        <span style="color:var(--ink3);font-size:12px">${lab}</span>
+        <span style="margin-left:auto;font-family:ui-monospace,monospace;font-size:12px">${((pt[k]||0)*1000).toFixed(0)} ms</span>
+      </div>`).join('');
+  }
+  // (overlay map renders on demand, not in the poll loop)
+  // ---- Burst panel: 10 ms max-in-bucket, all devices on one time axis ----
+  const BU=D.burst||{}, bcv=document.getElementById('cv_burst');
+  if(bcv&&Object.keys(BU).length){
+    const ctx=bcv.getContext('2d'), W=bcv.clientWidth, Hc=150;
+    if(bcv.width!==W*2){bcv.width=W*2;bcv.height=Hc*2;ctx.scale(2,2);}
+    ctx.clearRect(0,0,W,Hc);
+    let t0=Infinity,t1=-Infinity,vmax=0;
+    for(const k in BU) for(const [t,v] of BU[k]){if(t<t0)t0=t;if(t>t1)t1=t;if(v>vmax)vmax=v;}
+    if(t1>t0&&vmax>0){
+      vmax=Math.max(vmax,1);
+      const X=t=>8+(W-16)*(t-t0)/(t1-t0), Y=v=>Hc-14-(Hc-24)*(v/vmax);
+      const css=getComputedStyle(document.documentElement);
+      for(const d of DEVS){ if(d.k==='TOTAL'||!BU[d.k]||!BU[d.k].length) continue;
+        ctx.strokeStyle=css.getPropertyValue(d.col)||'#888'; ctx.lineWidth=1;
+        ctx.beginPath(); let first=true;
+        for(const [t,v] of BU[d.k]){const x=X(t),y=Y(v); if(first){ctx.moveTo(x,y);first=false;} else ctx.lineTo(x,y);}
+        ctx.stroke();
+      }
+      ctx.fillStyle=css.getPropertyValue('--ink3')||'#999';
+      ctx.font='10px ui-monospace,monospace';
+      ctx.fillText(vmax.toFixed(1)+' GB/s',10,12);
+      ctx.fillText('-10s',10,Hc-2); ctx.fillText('now',W-32,Hc-2);
+      const J=D.jitter||{}; const jmax=Math.max(...Object.values(J).map(Number),0);
+      const bi=document.getElementById('burstinfo');
+      if(bi&&!bi.textContent.startsWith('saved'))
+        bi.textContent=`max-in-bucket · last 10 s · tick jitter ${jmax.toFixed(1)}% ${jmax>1?'⚠ sampler descheduled — treat peaks as lower bounds':''}`;
+    }
+  }
+  // ---- Last-arm scorecard (marker state=done) ----
+  const LA=D.last_arm, lap=document.getElementById('lastarmpanel');
+  if(lap){ if(LA&&!(D.phases||{}).active){ lap.style.display='';
+    set('lastarmname',`${LA.arm} · ${LA.block} · ${LA.tokens} tok · rc=${LA.rc}${LA.overrides?' · '+LA.overrides:''}`);
+    set('lastarmspeed',(LA.fused||0).toFixed(4)+'<span style="font-size:12px;color:var(--ink3)"> tok/s fused</span>');
+    const c=LA.counters||{};
+    document.getElementById('lastarmgrid').innerHTML=[
+      ['steady tok/s',LA.steady!=null?LA.steady.toFixed(4):'–'],
+      ['GB/token',LA.gb_tok!=null?LA.gb_tok.toFixed(2):'–'],
+      ['total GB',LA.gb_total!=null?LA.gb_total.toFixed(0):'–'],
+      ['first chunk s',LA.first_chunk_s!=null?LA.first_chunk_s:'–'],
+      ['text md5',`<span title="corruption detector: compare with the rung reference">${LA.text_md5||'–'}</span>`],
+      ['drafts',c.drafts||'–'],
+      ['summer hits',c.summer_hits!=null?`${c.summer_hits} (${c.summer_hit_rate||''})`:'–'],
+      ['suppressed',c.summer_suppressed||'–'],
+    ].map(([k,v])=>`<div><div style="color:var(--ink3);font-size:11.5px">${k}</div><div style="font-family:ui-monospace,monospace;font-size:14px">${v}</div></div>`).join('');
+  } else lap.style.display='none'; }
+  // ---- Summer pool live panel (hidden until a [summer] line is seen) ----
+  const SM=D.summer||{}, smp=document.getElementById('summerpanel');
+  if(smp){ if(SM.seen){ smp.style.display='';
+    set('summerstate', SM.enabled?`on · cap ${SM.cap_gb} GiB · admit bar ${SM.bar}`:'DISABLED — check resolution');
+    set('summerhitrate',(SM.hit_rate||0).toFixed(1)+'<span style="font-size:12px;color:var(--ink3)">% hits</span>');
+    const sh=SM.hist||[], sn=sh.length; let hrate='–';
+    if(sn>=2){const dt=sh[sn-1][0]-sh[0][0], dh=sh[sn-1][1]-sh[0][1]; if(dt>0) hrate=(dh/dt).toFixed(1)+'/s';}
+    const envstyle=SM.live_gb>10?' style="color:#c0392b;font-weight:600"':'';
+    document.getElementById('summergrid').innerHTML=[
+      ['hits',`${(SM.hits||0).toLocaleString()} · ${hrate}`],
+      ['suppressed (reads removed)',(SM.suppressed||0).toLocaleString()],
+      ['wide_skips',(SM.wide_skips||0).toLocaleString()],
+      ['inserts / evictions',`${(SM.inserts||0).toLocaleString()} / ${(SM.evictions||0).toLocaleString()}`],
+      ['RAM-served / copied',`${((SM.served_mb||0)/1000).toFixed(1)} / ${((SM.copied_mb||0)/1000).toFixed(1)} GB`],
+      ['pool live',`<span${envstyle}>${(SM.live_gb||0).toFixed(1)} GiB</span> of ${SM.cap_gb} · envelope ≤10`],
+    ].map(([k,v])=>`<div><div style="color:var(--ink3);font-size:11.5px">${k}</div><div style="font-family:ui-monospace,monospace;font-size:14px">${v}</div></div>`).join('');
+  } else smp.style.display='none'; }
+  set('ramsub2',`used+free = ${((s.ram||0)+(s.ram_avail!=null?s.ram_avail:0)).toFixed(1)} of 128 · swap ${((s.swap||0)/1024).toFixed(1)} GB`);
+  for(const d of DEVS){
+    const isTot=d.k==='TOTAL';
+    if(isTot&&!showTotal) continue;
+    const cur=isTot?D.cur_total:(D.cur[d.k]||0);
+    const pk =isTot?(D.peaks.TOTAL||0):(D.peaks[d.k]||0);
+    const cap=isTot?capTot:D.cap[d.k];
+    const dy=(D.duty||{})[d.k];
+    const dutytag = dy&&!isTot ? ` <span style="font-size:12px;color:${dy.duty_pct>=90?'#2e7d32':'var(--ink3)'}">· ${dy.duty_pct}% duty</span>` : '';
+    set('now_'+d.k,cur.toFixed(2)+'<span style="font-size:12px;color:var(--ink3)"> GB/s</span>'+dutytag);
+    set('sub_'+d.k,`peak ${pk.toFixed(2)} &nbsp;·&nbsp; capability ${cap.toFixed(2)} &nbsp;·&nbsp; ${(100*cur/cap).toFixed(0)}% utilised`+
+      (dy&&!isTot?` &nbsp;·&nbsp; <b>active ${dy.active.toFixed(2)} × ${dy.duty_pct}% duty</b>`:''));
+    const u=document.getElementById('ut_'+d.k); if(u) u.style.width=Math.min(100,100*cur/cap)+'%';
+  }
+
+
+  // ---- redistribution progress (only shows during genuine byte copies) ----
+  const sp=document.getElementById('stagepanel'), st=D.staging||{};
+  if(st.active){
+    sp.style.display='';
+    document.getElementById('stageop').textContent=st.op||'copying';
+    document.getElementById('stagepct').textContent=(st.pct||0).toFixed(1)+'%';
+    document.getElementById('stagebar').style.width=(st.pct||0)+'%';
+    const eta=st.eta_s==null?'—':(st.eta_s>90?Math.round(st.eta_s/60)+' min':st.eta_s+' s');
+    document.getElementById('stagesub').textContent=
+      `${(st.done||0).toLocaleString()} / ${(st.total||0).toLocaleString()} experts · `+
+      `${st.gb_done} / ${st.gb_total} GB · ${st.rate_per_s}/s · ETA ${eta}`;
+  } else { sp.style.display='none'; }
+  // ---- weights distribution: which drive SERVES each expert ----
+  if(D.dist && D.dist.total){
+    const f=D.dist.files, tot=D.dist.total, held=D.dist.held, cfg=D.dist.cfg;
+    document.getElementById('disttot').textContent=tot.toLocaleString()+' experts';
+    document.getElementById('distcfg').textContent=
+      'DIR_C '+cfg.dir_c.split('/').pop()+' → HOT '+(cfg.hot==='OFF'?'OFF':cfg.hot.split('/').pop())
+      +' → DIR_B → primary';
+    document.getElementById('diststack').innerHTML=ORDER.map(k=>{
+      const pc=100*(f[k]||0)/tot;
+      return pc<0.4?'':`<div title="${k}: ${(f[k]||0).toLocaleString()} experts"
+        style="width:${pc}%;background:var(${COL[k]});display:flex;align-items:center;
+        justify-content:center;color:#fff;font-family:ui-monospace,monospace;font-size:11.5px">
+        ${pc>7?pc.toFixed(1)+'%':''}</div>`;}).join('');
+    document.getElementById('distlegend').innerHTML=ORDER.map(k=>{
+      const n=f[k]||0, pc=100*n/tot, gbs=(D.cur[k]||0), cap=D.cap[k];
+      const gbShare=n*17.547264/1024;
+      return `<div style="background:var(--sunk);border-radius:3px;padding:9px 11px">
+        <div style="display:flex;align-items:center;gap:6px;font-family:-apple-system,sans-serif;font-size:12px;font-weight:640">
+          <i style="width:12px;height:3px;border-radius:2px;background:var(${COL[k]})"></i>${k}</div>
+        <div class="num" style="font-size:17px;margin-top:3px">${pc.toFixed(1)}<span style="font-size:11px;color:var(--ink3)">% of weights</span></div>
+        <div style="font-size:11px;color:var(--ink3)">${n.toLocaleString()} experts · ${gbShare.toFixed(0)} GiB · holds ${(held[k]||0).toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--ink3)">serving ${gbs.toFixed(2)} of ${cap.toFixed(2)} GB/s</div>
+      </div>`;}).join('');
+  }
+  draw();
+}
+function draw(){
+  if(!D||!built) return;
+  const cs=getComputedStyle(document.documentElement), capTot=Object.values(D.cap).reduce((a,b)=>a+b,0);
+  // Shared scale: DEVICES share an axis sized to device data only, capped at
+  // 20 GB/s. Previously this used capTot (28.73), so a single drive's panel
+  // read up to 30 GB/s when no drive can exceed ~12 — misleading.
+  let devMax=0, totMax=0;
+  for(const d of DEVS){
+    if(d.k==='TOTAL'&&!showTotal) continue;
+    const s=trim(d.k==='TOTAL'?D.total:(D.traces[d.k]||[]));
+    for(const [,v] of s){ if(d.k==='TOTAL'){ if(v>totMax) totMax=v; }
+                          else if(v>devMax) devMax=v; } }
+  const gmaxDev=Math.min(20, Math.max(devMax, Math.max(...Object.values(D.cap)))*1.08);
+  const gmaxTot=Math.max(totMax, capTot)*1.06;
+  const ink3=cs.getPropertyValue('--ink3'), rule=cs.getPropertyValue('--rule');
+  for(const d of DEVS){
+    if(d.k==='TOTAL'&&!showTotal) continue;   // hidden canvas has zero size
+    const cv=document.getElementById('cv_'+d.k); if(!cv) continue;
+    const ser=trim(d.k==='TOTAL'?D.total:(D.traces[d.k]||[]));
+    const cap=d.k==='TOTAL'?capTot:D.cap[d.k];
+    const col=cs.getPropertyValue(d.col);
+    const dpr=devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight;
+    cv.width=W*dpr; cv.height=H*dpr;
+    const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+
+    const vals=ser.map(p=>p[1]);
+    const wpeak=vals.length?Math.max(...vals):0;                 // peak in window
+    const spk = d.k==='TOTAL'?(D.peaks.TOTAL||0):(D.peaks[d.k]||0); // session peak
+    const avg = vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+
+    let maxY=shared?(d.k==='TOTAL'?gmaxTot:gmaxDev):Math.max(cap,wpeak,spk)*1.16;
+    if(!isFinite(maxY)||maxY<=0) maxY=cap*1.2;
+    const L=36,R=62,T=8,B=14,w=W-L-R,h=H-T-B;  // B leaves room for time labels
+    const Y=v=>T+h-h*Math.min(v,maxY)/maxY;
+
+    g.font='9.5px ui-monospace,Menlo,monospace';
+    g.strokeStyle=rule; g.lineWidth=1;
+    const step=maxY>20?10:maxY>10?5:maxY>4?2:1;
+    for(let v=0;v<=maxY;v+=step){ g.globalAlpha=.55; g.beginPath(); g.moveTo(L,Y(v)); g.lineTo(W-R,Y(v)); g.stroke();
+      g.globalAlpha=1; g.fillStyle=ink3; g.fillText(v.toFixed(0),6,Y(v)+3); }
+
+    // Time axis. Samples carry absolute timestamps, so ticks are labelled in
+    // minutes BEFORE the newest sample -- the window is a rolling 120 s, which
+    // is far shorter than a 200-token run, so "-2m" is the left edge.
+    if(ser.length>1){
+      const t0=ser[0][0], t1=ser[ser.length-1][0], span=t1-t0;
+      if(span>0){
+        g.fillStyle=ink3; g.textAlign='center';
+        const tick=span>240?60:span>90?30:15;   // seconds between labels
+        for(let a=0;a<=span+0.01;a+=tick){
+          const x=L+w*(span-a)/span;
+          g.globalAlpha=.35; g.beginPath(); g.moveTo(x,T); g.lineTo(x,T+h); g.stroke();
+          g.globalAlpha=1;
+          const lab = a===0 ? 'now' : (a>=60 ? `-${(a/60).toFixed(a%60?1:0)}m` : `-${a.toFixed(0)}s`);
+          g.fillText(lab, x, T+h+5.5);
+        }
+        g.textAlign='left';
+      }
+    }
+
+    // bars: current reads
+    if(ser.length){
+      const bw=Math.max(1,(w/ser.length)-0.6);
+      ser.forEach(([,v],i)=>{ const x=L+w*i/ser.length, y=Y(v);
+        g.fillStyle=col; g.globalAlpha=v>cap?1:.72; g.fillRect(x,y,bw,T+h-y); });
+      g.globalAlpha=1;
+    }
+
+    const label=(v,txt,color,dash,alpha)=>{
+      if(!isFinite(v)||v<=0) return;
+      g.setLineDash(dash); g.strokeStyle=color; g.globalAlpha=alpha; g.lineWidth=1.4;
+      g.beginPath(); g.moveTo(L,Y(v)); g.lineTo(W-R,Y(v)); g.stroke();
+      g.setLineDash([]); g.globalAlpha=1; g.fillStyle=color;
+      g.fillText(txt+' '+v.toFixed(2), W-R+5, Y(v)+3.5);
+    };
+    // reference lines: cap (dashed), peak (dotted), active-rate (bold — the
+    // busy-time throughput, the honest "how hard is this drive working"),
+    // window-avg (thin, includes idle gaps).
+    const dy=(D.duty||{})[d.k];
+    label(cap,  'cap',  col,   [4,3], .55);
+    label(spk,  'peak', col,   [1,3], 1);
+    if(dy && dy.active>0){
+      g.setLineDash([]); g.strokeStyle=col; g.globalAlpha=1; g.lineWidth=2.2;
+      g.beginPath(); g.moveTo(L,Y(dy.active)); g.lineTo(W-R,Y(dy.active)); g.stroke();
+      g.fillStyle=col; g.fillText('act '+dy.active.toFixed(2)+' @'+dy.duty_pct+'%', W-R+5, Y(dy.active)+3.5);
+    }
+    label(avg,  'avg',  ink3,  [],    .95);
+  }
+}
+// ---- Peak reader: raw 10ms ticks, 10s window, undecimated ----------------
+function drawPeak(){
+  fetch('/peakreader').then(r=>r.json()).then(j=>{
+    const order=['internal','White','Green','Yellow','M1'].filter(k=>j.devs[k]);
+    const cs=getComputedStyle(document.documentElement);
+    const colOf={internal:'--int',White:'--c',Green:'--b',Yellow:'--a'};
+    document.getElementById('peakcards').innerHTML=order.map(k=>{
+      const d=j.devs[k];
+      const stretched = d.session_max_dt_ms > 14;
+      return `<div style="border:1px solid var(--rule);border-radius:6px;padding:10px 12px">
+        <div style="font-weight:600;color:${cs.getPropertyValue(colOf[k])||'#888'}">${k}</div>
+        <div style="font-size:22px;font-family:ui-monospace,monospace">${(d.session_max_gbps||0).toFixed(1)} <span style="font-size:12px;color:var(--ink3)">GB/s peak (bytes÷actual dt)</span></div>
+        <div style="font-size:12px;color:var(--ink3)">= ${d.session_max_mb.toFixed(1)} MB over a ${d.session_max_dt_ms}ms tick${stretched?' <span style="color:#c0392b">⚠ stretched (sampler descheduled — not a 10ms burst)</span>':''}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('peakstamp').textContent=`tick ${j.tick_ms}ms · jitter `+
+      order.map(k=>`${k} ${(j.jitter[k]||0).toFixed(1)}%`).join(' · ');
+    // canvas: every tick as a thin bar, MB scale, largest marked per device
+    const cv=document.getElementById('peakcanvas'), W=cv.clientWidth, H=340;
+    cv.width=W*2; cv.height=H*2; const g=cv.getContext('2d'); g.scale(2,2);
+    g.clearRect(0,0,W,H);
+    let mbmax=0, t0=Infinity, t1=-Infinity;
+    order.forEach(k=>j.devs[k].ticks.forEach(t=>{ if(t[1]>mbmax)mbmax=t[1]; if(t[0]<t0)t0=t[0]; if(t[0]>t1)t1=t[0]; }));
+    mbmax=Math.max(mbmax,1);
+    const L=42,R=12,T=10,B=18, w=W-L-R, h=H-T-B;
+    const X=t=>L+w*(t-t0)/Math.max(1e-6,t1-t0), Y=v=>T+h-h*v/(mbmax*1.1);
+    g.strokeStyle=cs.getPropertyValue('--rule'); g.lineWidth=1;
+    g.font='9.5px ui-monospace,monospace'; g.fillStyle=cs.getPropertyValue('--ink3');
+    for(let i=0;i<=4;i++){ const v=mbmax*1.1*i/4, y=Y(v); g.beginPath();g.moveTo(L,y);g.lineTo(W-R,y);g.stroke(); g.fillText(v.toFixed(0)+'MB',4,y+3); }
+    order.forEach(k=>{
+      const col=cs.getPropertyValue(colOf[k])||'#888';
+      g.strokeStyle=col; g.globalAlpha=0.6; g.lineWidth=1;
+      j.devs[k].ticks.forEach(t=>{ if(t[1]<=0)return; g.beginPath(); g.moveTo(X(t[0]),Y(0)); g.lineTo(X(t[0]),Y(t[1])); g.stroke(); });
+      // mark this device's largest tick
+      g.globalAlpha=1; let mt=null; j.devs[k].ticks.forEach(t=>{ if(!mt||t[1]>mt[1])mt=t; });
+      if(mt&&mt[1]>0){ g.fillStyle=col; g.beginPath(); g.arc(X(mt[0]),Y(mt[1]),3,0,7); g.fill();
+        g.fillText(mt[1].toFixed(1)+'MB',X(mt[0])+5,Y(mt[1])+3); }
+    });
+    g.globalAlpha=1; g.fillStyle=cs.getPropertyValue('--ink3');
+    g.fillText('-10s',L,H-4); g.fillText('now',W-R-24,H-4);
+
+    // ---- per-drive small multiples, shared MB scale ----
+    const grid=document.getElementById('peakgrid');
+    grid.innerHTML=order.map(k=>`<div><div style="font-weight:600;color:${cs.getPropertyValue(colOf[k])||'#888'};font-size:12px;margin-bottom:4px">${k}</div><canvas id="pk_${k}" style="height:150px;width:100%"></canvas></div>`).join('');
+    order.forEach(k=>{
+      const c=document.getElementById('pk_'+k); if(!c)return;
+      const ww=c.clientWidth, hh=150; c.width=ww*2; c.height=hh*2;
+      const gg=c.getContext('2d'); gg.scale(2,2); gg.clearRect(0,0,ww,hh);
+      const col=cs.getPropertyValue(colOf[k])||'#888';
+      const pl=34,pr=8,pt=8,pb=14, gw=ww-pl-pr, gh=hh-pt-pb;
+      const gX=t=>pl+gw*(t-t0)/Math.max(1e-6,t1-t0), gY=v=>pt+gh-gh*v/(mbmax*1.1);
+      gg.strokeStyle=cs.getPropertyValue('--rule'); gg.lineWidth=1; gg.font='9px ui-monospace,monospace'; gg.fillStyle=cs.getPropertyValue('--ink3');
+      for(let i=0;i<=2;i++){const v=mbmax*1.1*i/2,y=gY(v); gg.beginPath();gg.moveTo(pl,y);gg.lineTo(ww-pr,y);gg.stroke(); gg.fillText(v.toFixed(0),4,y+3);}
+      gg.strokeStyle=col; gg.globalAlpha=.7;
+      j.devs[k].ticks.forEach(t=>{ if(t[1]<=0)return; gg.beginPath(); gg.moveTo(gX(t[0]),gY(0)); gg.lineTo(gX(t[0]),gY(t[1])); gg.stroke(); });
+      gg.globalAlpha=1; let mt=null; j.devs[k].ticks.forEach(t=>{ if(!mt||t[1]>mt[1])mt=t; });
+      if(mt&&mt[1]>0){ gg.fillStyle=col; gg.beginPath(); gg.arc(gX(mt[0]),gY(mt[1]),3,0,7); gg.fill(); gg.fillText(mt[1].toFixed(1)+'MB',gX(mt[0])+4,gY(mt[1])+3); }
+    });
+  }).catch(()=>{});
+}
+setInterval(()=>{if(localStorage.getItem('k3_tab')==='peak') drawPeak();},700);
+tick(); setInterval(tick,700);
+addEventListener('resize',()=>{draw(); if(localStorage.getItem('k3_tab')==='split') drawSplit();});
+setInterval(()=>{if(localStorage.getItem('k3_tab')==='split') drawSplit();},700);
+// Restore the last tab. Done after tick() so the live panels are built even
+// when the page opens straight into Stats — switching back must not show an
+// empty shell waiting for the next poll.
+showTab(localStorage.getItem('k3_tab')==='stats'?'stats':'live');
+// The Live tab is the default, so loadStats() would otherwise never run and the
+// telemetry export bar would open with an empty block list and no arm count.
+// Both export bars derive their selection from STATS, so it is fetched once at
+// startup regardless of which tab is showing.
+if(!statsLoaded) loadStats();
+</script></body></html>
