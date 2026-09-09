@@ -15,13 +15,13 @@ sampled together at 100 ms by `k3-diskscope`: first as a replay of the sampler's
 record (the bars move as the drives did, at 8× speed), then reduced to one-second windows:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="charts/drives-live-dark.svg">
-  <img src="charts/drives-live.svg" alt="Animated replay of the four drives' read throughput during the 200-token record arm, from the sampler">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/drives-live-dark.svg">
+  <img src="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/drives-live.svg" alt="Animated replay of the four drives' read throughput during the 200-token record arm, from the sampler">
 </picture>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="charts/read-timeline-dark.svg">
-  <img src="charts/read-timeline.svg" alt="Per-drive read throughput during a 200-token run">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/read-timeline-dark.svg">
+  <img src="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/read-timeline.svg" alt="Per-drive read throughput during a 200-token run">
 </picture>
 
 The same run reduced to median and peak draw per drive, against each drive's
@@ -30,8 +30,8 @@ idle — every drive at 88–100% of its own ceiling, which is why the read barr
 rather than total bandwidth sets the decode speed:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="charts/drive-draw-dark.svg">
-  <img src="charts/drive-draw.svg" alt="Per-drive draw under the engine vs standalone ceiling">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/drive-draw-dark.svg">
+  <img src="https://raw.githubusercontent.com/argonautlabsai/argodrive/main/charts/drive-draw.svg" alt="Per-drive draw under the engine vs standalone ceiling">
 </picture>
 
 Both charts are produced from the sampler CSV and the ceiling tool's output by
