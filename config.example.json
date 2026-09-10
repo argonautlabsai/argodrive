@@ -1,0 +1,7 @@
+{
+  "runs": "/path/to/benchmark/arms",
+  "drives": [
+    {"id": "internal", "label": "Internal SSD", "path": "/"},
+    {"id": "external1", "label": "External SSD", "path": "/Volumes/My SSD"}
+  ]
+}

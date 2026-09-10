@@ -10,7 +10,7 @@ watched DURING runs, which is exactly when it perturbs them — treat anything
 measured with this open as indicative, not as a promotable number.
 """
 from __future__ import annotations
-import atexit, collections, csv, http.server, io, json, os, re, signal, subprocess, threading, time, urllib.parse
+import argparse, sys, atexit, collections, csv, http.server, io, json, os, re, signal, subprocess, threading, time, urllib.parse
 
 # --- diskscope child lifecycle -------------------------------------------
 # One sampler should exist per running server. Without explicit teardown the
@@ -28,6 +28,10 @@ def _reap_scopes(*_args) -> None:
         try:
             if proc.poll() is None:
                 proc.terminate()
+                proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
         except Exception:
             pass
     _SCOPE.clear()
@@ -40,7 +44,33 @@ for _sig in (signal.SIGTERM, signal.SIGINT):
     except (ValueError, OSError):
         pass    # not on the main thread; atexit still covers the normal path
 
-PORT = 8130
+from argodrive_core import (VERSION, load_config, discover_drives, CounterBuckets,
+                            engine_processes, chunk_progress)
+
+
+def arguments():
+    parser = argparse.ArgumentParser(description="ARGODRIVE local inference monitor and saved-run reports")
+    parser.add_argument('--port', type=int, default=8130)
+    parser.add_argument('--config', help='Optional JSON hardware configuration')
+    parser.add_argument('--runs', help='Directory containing benchmark block directories')
+    parser.add_argument('--marker', help='Live harness marker JSON (optional)')
+    parser.add_argument('--reports-only', action='store_true', help='Read saved runs without hardware collection')
+    parser.add_argument('--doctor', action='store_true', help='Print setup diagnostics and exit')
+    parser.add_argument('--sample-ms', type=int, choices=(10, 100, 200), default=100)
+    opts = parser.parse_args() if __name__ == '__main__' else parser.parse_args(['--reports-only'])
+    if not 1024 <= opts.port <= 65535:
+        parser.error('--port must be between 1024 and 65535')
+    try:
+        config = load_config(opts.config)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    return opts, config
+
+
+OPTIONS, CONFIG = arguments()
+PORT = OPTIONS.port
+DRIVE_INFO = []
+DISCOVERY_ERRORS = []
 
 
 def _derive_devs(quiet: bool = False) -> dict[str, str]:
@@ -54,23 +84,14 @@ def _derive_devs(quiet: bool = False) -> dict[str, str]:
     "four idle drives with no error" failure this project has already hit
     once. Derive it instead, and fail loudly rather than draw a wrong page.
     """
-    found: dict[str, str] = {}
-    for name, path in (("internal", "/"), ("Yellow", "/Volumes/Yellow"),
-                       ("Green", "/Volumes/Green"), ("White", "/Volumes/White")):
-        try:
-            info = subprocess.run(["diskutil", "info", path], capture_output=True,
-                                  text=True, timeout=10).stdout
-        except (OSError, subprocess.SubprocessError):
-            continue
-        m = re.search(r"APFS Physical Store:\s*(\S+)", info)
-        if m:
-            found[re.sub(r"s\d+$", "", m.group(1))] = name
-    missing = {"internal", "Yellow", "Green", "White"} - set(found.values())
-    if missing and not quiet:
-        print(f"k3-live  WARNING: not mounted / not resolved: {sorted(missing)}")
-        print("k3-live  those drives will read as idle because they are ABSENT, not quiet.")
+    global DRIVE_INFO, DISCOVERY_ERRORS
+    if OPTIONS.reports_only:
+        return {}
+    found, DRIVE_INFO, DISCOVERY_ERRORS = discover_drives(CONFIG)
     if not quiet:
-        print(f"k3-live  device map: {found}")
+        print(f"ARGODRIVE devices: {found}")
+        for warning in DISCOVERY_ERRORS:
+            print(f"ARGODRIVE discovery: {warning}")
     return found
 
 
@@ -111,6 +132,14 @@ def _remap_check() -> bool:
     print(f"k3-live  device map CHANGED: {DEVS} -> {fresh}", flush=True)
     DEVS.clear()
     DEVS.update(fresh)
+    CAP.clear()
+    CAP.update({d['id']: d['ceiling_gbps'] for d in DRIVE_INFO if d['ceiling_gbps'] is not None})
+    with lock:
+        for series in rates.values():
+            series.clear()
+        total_rates.clear()
+        for name in peaks:
+            peaks[name] = 0.0
     for name in fresh.values():
         _ensure_name(name)
     return True
@@ -118,22 +147,25 @@ def _remap_check() -> bool:
 # timed arms: the original figures came from a four-way concurrent cold-read
 # benchmark and all three enclosures have since been exceeded in real runs
 # (K3A by 16%), which made the "% utilised" readout show >100%.
-CAP = {"internal": 13.50, "White": 7.08, "Green": 7.08, "Yellow": 5.80, "M1": 4.7}   # internal: 13.5 = measured 200 ms peak on the 2026-09-05 champion arms (was 11.68)
+CAP = {d["id"]: d["ceiling_gbps"] for d in DRIVE_INFO if d["ceiling_gbps"] is not None}   # internal: 13.5 = measured 200 ms peak on the 2026-09-05 champion arms (was 11.68)
 # Network-fed pseudo-devices: the M1 Max expert tier arrives over the
 # Thunderbolt bridge (10.55.0.2), not through IOKit disk counters. Bytes
 # RECEIVED on the bridge member port are the M1's contribution; capacity is
 # the measured one-cable payload ceiling (4.7 GB/s, 2026-09-04).
-NET_DEVS = {"M1": os.environ.get("K3_LIVE_M1_IF", "en6")}
+NET_DEVS = {}  # Network traffic is not physical SSD traffic.
 WINDOW = 30.0    # was 120; longer windows squeeze the 200 ms bars illegibly
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CSV = os.environ.get("K3_SCOPE_CSV", f"/tmp/k3_live_scope_{PORT}.csv")
+CSV = os.environ.get("K3_SCOPE_CSV", f"/tmp/argodrive_scope_{PORT}_{os.getpid()}.csv")
 
 rates: dict[str, collections.deque] = {v: collections.deque(maxlen=1200) for v in DEVS.values()}
 sysv = {"cpu": 0.0, "ram": 0.0, "ram_avail": 128.0, "ram_mps": 0.0,
         "ram_engine": 0.0, "ram_system": 0.0, "swap": 0.0,
         "gpu": 0.0, "gmem": 0.0}
-RAM_TOTAL = 128.0  # GiB
-health = {"scope": False}
+try:
+    RAM_TOTAL = int(subprocess.check_output(['sysctl', '-n', 'hw.memsize'], stderr=subprocess.DEVNULL))/2**30 if not OPTIONS.reports_only else None
+except (OSError, ValueError, subprocess.SubprocessError):
+    RAM_TOTAL = None
+health = {"scope": False, "sample_at": None, "system_at": None, "engine_detection": "unknown", "engines": []}
 
 # Rolling memory history for the Storage+Memory split view. Memory previously
 # existed on this page ONLY as instantaneous cards, with no series at all —
@@ -183,7 +215,7 @@ summer_live = {"seen": False, "enabled": False, "cap_gb": 0, "hits": 0,
                "live_gb": 0.0, "bar": 0,
                "hist": collections.deque(maxlen=600)}
 
-MARKER_PATH = os.path.join(ROOT, "k3-live-marker.json")
+MARKER_PATH = OPTIONS.marker or CONFIG.get("marker") or os.path.join(ROOT, "k3-live-marker.json")
 
 
 def _read_marker() -> dict | None:
@@ -343,6 +375,7 @@ def phases_reader() -> None:
             time.sleep(1.0)
 peaks = {v: 0.0 for v in DEVS.values()}
 peaks["TOTAL"] = 0.0
+total_rates = collections.deque(maxlen=1200)
 lock = threading.Lock()
 
 # 10 ms burst ring (K3-MONITOR-10MS-UPGRADE-SPEC). The sampler now ticks at
@@ -425,8 +458,9 @@ def scope_reader() -> None:
         # to the same csv, which makes the live rates meaningless. Retire first,
         # then spawn.
         _reap_scopes()
+        buckets = CounterBuckets(DEVS)
         proc = subprocess.Popen(
-            [os.path.join(ROOT, "k3-diskscope"), "100", "999999", CSV, *DEVS],
+            [os.path.join(ROOT, "k3-diskscope"), str(OPTIONS.sample_ms), "999999", CSV, *DEVS],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         # The child outlives us unless we say otherwise: it is spawned with a
@@ -516,15 +550,27 @@ def scope_reader() -> None:
                 except ValueError:
                     continue
                 name = DEVS[dev]
+                result = buckets.add(dev, t, v1)
+                with lock:
+                    health['sample_at'] = time.time()
+                    if result:
+                        rates[name].append((result['end'], result['rate']))
+                        # Delayed samples remain visible, but do not count as 200 ms peaks.
+                        if result['seconds'] <= .35:
+                            peaks[name] = max(peaks.get(name, 0), result['rate'])
+                        if result['total'] is not None:
+                            total_rates.append((result['end'], result['total']))
+                            if result['seconds'] <= .35:
+                                peaks['TOTAL'] = max(peaks['TOTAL'], result['total'])
                 if dev in prev:
                     pt, pv = prev[dev]
                     dt = t - pt
-                    if dt > 0:
+                    if dt > 0 and v1 >= pv:
                         r = (v1 - pv) / 1e9 / dt
                         with lock:
                             burst[name].append((round(t, 3), round(r, 3), v1 - pv))
                             _jticks[name] += 1
-                            if abs(dt - 0.010) > 0.002:
+                            if abs(dt - OPTIONS.sample_ms/1000) > OPTIONS.sample_ms/5000:
                                 _jitter[name] += 1
                             # Peak over a 100 ms rolling window, NOT per tick:
                             # IOKit credits completions in clusters, so a
@@ -546,18 +592,6 @@ def scope_reader() -> None:
                             tick_bytes = v1 - pv
                             if tick_bytes > _peaktick[name][0]:
                                 _peaktick[name] = (tick_bytes, round(t, 3), round(dt * 1000, 2))
-                            acc = _bucket[name]
-                            acc[1] += r
-                            acc[2] += 1
-                            if t - acc[0] >= 0.2:
-                                if acc[2]:
-                                    mean_rate = acc[1] / acc[2]
-                                    rates[name].append((round(t, 2), round(mean_rate, 3)))
-                                    if acc[2] >= 10:
-                                        # a full bucket (>=10 ticks of 10 ms), not a
-                                        # stub left by a respawn or a stalled sampler
-                                        peaks[name] = max(peaks[name], mean_rate)
-                                _bucket[name] = [t, 0.0, 0]
                 prev[dev] = (t, v1)
         with lock:
             health["scope"] = False
@@ -568,7 +602,14 @@ def sys_reader() -> None:
         try:
             cpu = subprocess.run(["ps", "-A", "-o", "%cpu"], capture_output=True, text=True).stdout
             cpu = sum(float(x) for x in cpu.split()[1:] if x.replace(".", "", 1).isdigit())
+            process = subprocess.run(['ps', '-A', '-o', 'pid=,rss=,comm='], capture_output=True, text=True, timeout=3)
+            engines = engine_processes(process.stdout) if process.returncode == 0 else []
+            with lock:
+                health.update(engines=engines, engine_detection='ok' if process.returncode == 0 else 'unavailable')
             vm = subprocess.run(["vm_stat"], capture_output=True, text=True).stdout
+            if not vm.strip() or RAM_TOTAL is None:
+                raise ValueError('System memory counters unavailable')
+            page_size = int(re.search(r'page size of (\d+) bytes', vm).group(1))
             q = lambda k, d=0: (int(m.group(1)) if (m := re.search(k, vm)) else d)
             a = q(r"Pages active:\s+(\d+)")
             w = q(r"Pages wired down:\s+(\d+)")
@@ -589,22 +630,13 @@ def sys_reader() -> None:
             # value is a SUBSET of these pages, never an addition -- vm_stat's
             # categories already sum to physical (126.5 of 128 GiB measured);
             # adding it yielded impossible >128 GiB totals. Machine is 128 GiB.
-            used = (a + w + comp) * 16384 / 1073741824
-            avail = (fr + ina + spec) * 16384 / 1073741824
+            used = (a + w + comp) * page_size / 1073741824
+            avail = (fr + ina + spec) * page_size / 1073741824
             # Split "used" into the engine's own footprint and everything else
             # (OS, GUI, other processes). vm_stat's categories fall ~1.5 GiB
             # short of physical, so the remainder is folded into system rather
             # than silently dropped -- used + avail now sums to 128 exactly.
-            eng = 0.0
-            try:
-                ps_out = subprocess.run(
-                    ["ps", "-A", "-o", "rss=,comm="], capture_output=True, text=True).stdout
-                for line in ps_out.splitlines():
-                    parts = line.split(None, 1)
-                    if len(parts) == 2 and "deltafin" in parts[1]:
-                        eng += int(parts[0]) * 1024 / 1073741824
-            except Exception:
-                pass
+            eng = sum(e['rss_gib'] for e in engines)
             used = RAM_TOTAL - avail          # fold the unaccounted remainder in
             # Attribution note: a process's RSS does NOT include the GPU-wired
             # Metal allocations it owns, so `used - rss` is not "the OS". The
@@ -615,6 +647,7 @@ def sys_reader() -> None:
             system = max(0.0, used - eng - mps)
             gpct = float(g.group(1)) if g else 0.0
             with lock:
+                health['system_at'] = time.time()
                 sysv.update(cpu=cpu, ram=used, ram_avail=avail, ram_mps=mps,
                             ram_engine=eng, ram_system=system, swap=swap,
                             gpu=gpct, gmem=mps)
@@ -625,7 +658,7 @@ def sys_reader() -> None:
                 if tscope:
                     memhist.append([round(tscope, 2), round(used, 2), round(avail, 2),
                                     round(mps, 2), round(gpct, 1), round(cpu, 1),
-                                    round(fr * 16384 / 1073741824, 2)])
+                                    round(fr * page_size / 1073741824, 2)])
         except Exception:
             pass
         time.sleep(1.0)
@@ -723,7 +756,9 @@ def staging_status() -> dict:
 
 
 # ------------------------------------------------------------------ stats tab
-SOAK = os.path.join(ROOT, "k3-soak-logs")
+SOAK = OPTIONS.runs or CONFIG.get("runs") or os.environ.get("K3_SOAK_DIR") or (
+    os.path.join(ROOT, "k3-soak-logs") if os.path.isdir(os.path.join(ROOT, "k3-soak-logs"))
+    else os.path.abspath(os.path.join(ROOT, "..", "runs")))   # GLM53/arms (ds4 harness)
 _stats_cache: dict = {"key": None, "val": None}
 # Per-log parse memo: a tree rebuild (any new arm) used to re-parse every log
 # (1,445 logs = 18 s per /stats request, which the page times out on). Rows
@@ -745,6 +780,8 @@ def _parse_arm_cached(path: str):
 
 # Banner written by k3-arm.sh; the older harness wrote "RUNG <label> START".
 _RE_ARM = re.compile(r"^(?:ARM|RUNG)\s+(\S+)\s+START\s+(\S+)\s+overrides:\s*(.*)$")
+_RE_ARM_DS4 = re.compile(r"^ARM\s+(\S+)\s+START\s+(\S+ \S+)\s+(.*)$")   # ds4 harness (GLM project)
+_RE_DS4_SUMMARY = re.compile(r'^\{"tag":.*"decode_tok_s".*\}\s*$', re.M)
 _RE_PROMPT = re.compile(r"prompt=\[(.*)\]\s*$")
 _RE_TOKENS = re.compile(r"\btokens=(\d+)")
 # A run the shell had to signal is not a measurement, whatever its last [stats]
@@ -769,7 +806,10 @@ def _is_arm_log(name: str) -> bool:
 def _arm_mode(row: dict) -> str:
     """'off' when the harness passed K3_UAG_DRAFT=off (a plain-decode control),
     else 'on'. Read from the [arm] header overrides, not from engine output."""
-    return "off" if "K3_UAG_DRAFT=off" in (row.get("overrides") or "") else "on"
+    ov = row.get("overrides") or ""
+    if row.get("ds4"):
+        return "on" if re.search(r"\bmtp=1\b", ov) else "off"
+    return "off" if "K3_UAG_DRAFT=off" in ov else "on"
 
 
 def _arm_length(row: dict):
@@ -910,6 +950,33 @@ def _parse_arm(path: str) -> dict | None:
         # not a measurement.
         if row.get("tokens") and row["generated"] < row["tokens"]:
             row["incomplete"] = True
+    elif (dm := _RE_DS4_SUMMARY.search(text)):
+        # ds4 harness (GLM project): one JSON summary line per arm.
+        try:
+            import json as _json
+            j = _json.loads(dm.group(0))
+            hm = _RE_ARM_DS4.match(text.split("\n", 1)[0])
+            if hm and not row.get("started"):
+                row["arm"] = hm.group(1); row["started"] = hm.group(2)
+                if t := _RE_TOKENS.search(hm.group(3)): row["tokens"] = int(t.group(1))
+                row["overrides"] = re.sub(r"\btokens=\S+", "", hm.group(3)).strip() or "—"
+            if cm := re.search(r"^CONFIG (.*)$", text, re.M):
+                row["overrides"] = (row.get("overrides", "") + " " + re.sub(r"model=\S+", "", cm.group(1))).strip()
+            env_line = re.search(r'^DS4_ENV (.*)$', text, re.M)
+            if env_line:
+                row['overrides'] = (row.get('overrides', '')+' '+env_line.group(1).strip()).strip()
+            n = int(j.get("chunks") or 0); gen = float(j.get("gen_s") or 0); t1 = float(j.get("first_byte_s") or 0)
+            row.update(generated=n, elapsed=round(t1 + gen, 2), tok_s=round(n / (t1 + gen), 4) if t1 + gen > 0 else None,
+                       s_tok=(round(gen / n, 3) if n else None), chunks=n, drafts="—", accept=None,
+                       layer_passes=None, first_token_s=round(t1, 2), ds4=True)
+            if n > 1 and gen > 0:
+                row["tok_s_steady"] = round(float(j.get("decode_tok_s") or (n - 1) / gen), 4)
+                row["encode_share_pct"] = round(100 * t1 / (t1 + gen), 1) if (t1 + gen) else None
+            if j.get("hit_rate") is not None: row["cache_hit_pct"] = round(100 * float(j["hit_rate"]), 1)
+            if row.get("tokens") and n < row["tokens"]: row["incomplete"] = True
+            if int(j.get("rc") or 0) != 0: row["incomplete"] = True
+        except Exception:
+            row["incomplete"] = True
     else:
         row["incomplete"] = True
     # The check above is gated on a `tokens=` header that 729 of 836 logs in the
@@ -921,12 +988,28 @@ def _parse_arm(path: str) -> dict | None:
     #   (b) peer inference against the block, applied by the caller below.
     if _RE_SIGNAL.search(text):
         row["incomplete"] = True
+    # Which model this arm ran: ds4 arms name the file on their CONFIG line; deltafin arms are K3.
+    if mm := re.search(r"^CONFIG .*?model=(\S+)", text, re.M):
+        row["model"] = os.path.basename(mm.group(1)).replace(".gguf", "")
+    elif "[stats]" in text or "deltafin" in text[:2000]:
+        row["model"] = "Kimi K3"
+    if mm := re.search(r"routed expert size: ([\d.]+) MiB", text):
+        row["expert_mib"] = float(mm.group(1))
     for line in text.split("\n"):
         if m := _RE_MIRROR.match(line):
             row["mirror"] = m.group(1)
             break
     try:
-        row["ran"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path)))
+        end = re.search(r'^ARM \S+ END (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', text, re.M)
+        row['ran'] = end.group(1) if end else time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
+        row['time_source'] = 'harness completion' if end else 'file modification time'
+        prompt = re.search(r'^PROMPT \[(.*)\]$', text, re.M)
+        if prompt:
+            import hashlib
+            row['prompt_hash'] = hashlib.sha256(prompt.group(1).encode()).hexdigest()
+        config_line = re.search(r'^CONFIG (.*)$', text, re.M)
+        config_fields = dict(re.findall(r'(\w+)=(\S+)', config_line.group(1))) if config_line else {}
+        row['comparison_context'] = tuple(config_fields.get(k) for k in ('ctx', 'raw', 'temp', 'think'))
     except OSError:
         pass
     # Engine-declared memory facts, parsed from its own startup lines. These are
@@ -995,7 +1078,8 @@ def _map_devices(mapfile: str) -> dict:
     absent rather than guessed.
     """
     try:
-        text = open(mapfile, errors="ignore").read()
+        with open(mapfile, errors="ignore") as fh:
+            text = fh.read()
     except OSError:
         return {}
     dev = {}
@@ -1011,7 +1095,7 @@ def _map_devices(mapfile: str) -> dict:
             # (K3C taken for Green). Old .map files carrying role names are
             # translated: K3A = Yellow, K3B = Green, K3C = White.
             name = {"K3A": "Yellow", "K3B": "Green", "K3C": "White"}.get(name, name)
-            if name in ("internal", "Yellow", "Green", "White") and d.startswith("disk"):
+            if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) and re.fullmatch(r"disk\d+", d):
                 dev[d] = name
     return dev
 
@@ -1042,29 +1126,34 @@ def _parse_csv(path: str, mapfile: str) -> dict:
                     continue
     except OSError:
         return {}
-    IDLE = 0.5
-    per: dict = {}
+    per, windows = {}, {}
     for disk, name in dev.items():
-        s = cum.get(disk, [])
-        per[name] = [(s[i][1] - s[i - 1][1]) / 1e9 / (s[i][0] - s[i - 1][0])
-                     for i in range(1, len(s)) if s[i][0] > s[i - 1][0]]
-    names = ["internal", "Yellow", "Green", "White"]
-    n = min((len(per[k]) for k in names if per.get(k)), default=0)
-    if not n:
-        return {}
-    per["TOTAL"] = [sum(per[k][i] for k in names if per.get(k)) for i in range(n)]
-    out: dict = {}
-    for name in names + ["TOTAL"]:
+        points = cum.get(disk, [])
+        per[name] = []
+        for (ta, ba), (tb, bb) in zip(points, points[1:]):
+            if tb <= ta or bb < ba:
+                continue
+            rate = (bb-ba)/1e9/(tb-ta)
+            per[name].append((rate, tb-ta))
+            windows.setdefault((ta, tb), {})[name] = rate
+    names = list(dev.values())
+    per['TOTAL'] = [(sum(v.values()), tb-ta) for (ta, tb), v in windows.items() if set(v) == set(names)]
+    out = {}
+    for name in list(dict.fromkeys(names+['internal','White','Green','Yellow','TOTAL'])):
         v = per.get(name, [])
-        act = [x for x in v if x > IDLE]
-        key = "tot" if name == "TOTAL" else name
+        key = 'tot' if name == 'TOTAL' else name
         if not v:
-            # Device absent from this arm's .map: report it as missing, not idle.
-            out[f"ssd_{key}_act"] = out[f"ssd_{key}_peak"] = out[f"ssd_{key}_duty"] = ""
+            for metric in ('act','peak','duty','mean'):
+                out[f'ssd_{key}_{metric}'] = None
             continue
-        out[f"ssd_{key}_act"] = round(sum(act) / len(act), 2) if act else 0.0
-        out[f"ssd_{key}_peak"] = round(max(v), 2)
-        out[f"ssd_{key}_duty"] = round(100 * len(act) / len(v))
+        duration = sum(dt for rate, dt in v)
+        act = [(rate,dt) for rate,dt in v if rate > .5]
+        active_time = sum(dt for rate,dt in act)
+        out[f'ssd_{key}_act'] = round(sum(rate*dt for rate,dt in act)/active_time, 2) if active_time else 0
+        out[f'ssd_{key}_mean'] = round(sum(rate*dt for rate,dt in v)/duration, 2)
+        out[f'ssd_{key}_peak'] = round(max(rate for rate,dt in v), 2)
+        out[f'ssd_{key}_duty'] = round(100*active_time/duration)
+    out['ssd_window'] = 'sampler window; includes any recorded loading and idle time'
     return out
 
 
@@ -1182,7 +1271,11 @@ def _stats_blocks() -> list:
         ok = [r for r in rows if r.get("tok_s") and not r.get("incomplete")]
         by_len: dict = {}
         for r in ok:
-            by_len.setdefault(_arm_length(r), []).append(r)
+            # A ds4 block can contain several prompts and context lengths.
+            match = (_arm_length(r), r.get('model'), r.get('prompt_hash'), r.get('comparison_context'))
+            if r.get('ds4') and not r.get('prompt_hash'):
+                match += (r['arm'],)  # No inferred matched comparison without a prompt.
+            by_len.setdefault(match, []).append(r)
         for length, group in by_len.items():
             base = next((r for r in group if _arm_mode(r) == "off"), None)
             if base is None:
@@ -1190,7 +1283,9 @@ def _stats_blocks() -> list:
             if base is None:
                 base = group[0]
             for r in group:
-                r["delta_pct"] = round(100 * (r["tok_s"] - base["tok_s"]) / base["tok_s"], 2)
+                metric = 'tok_s_steady' if r.get('tok_s_steady') and base.get('tok_s_steady') else 'tok_s'
+                r['delta_metric'] = metric
+                r['delta_pct'] = round(100 * (r[metric] - base[metric]) / base[metric], 2)
                 r["delta_vs"] = base["arm"]
             base["is_base"] = True
         blocks.append({"block": os.path.basename(d), "mtime": newest,
@@ -1437,7 +1532,7 @@ SCHED_COST_US = {"internal": 1502, "K3C": 2478, "K3B": 3122, "K3A": 3025}
 # the matching "read" record's duration is borrowed). The tab answers, per
 # layer pass: which device finished last and how long the pass waited for it.
 _BYLAYER_CACHE: dict = {}
-_BYLAYER_ROLE = {"K3A": "Yellow", "K3B": "Green", "K3C": "White", "internal": "internal"}
+_BYLAYER_ROLE = {"K3A": "Yellow", "K3B": "Green", "K3C": "White", "internal": "internal", "White": "White", "Green": "Green", "Yellow": "Yellow"}
 
 def _bylayer_parse(path: str) -> dict:
     st = os.stat(path)
@@ -1448,6 +1543,7 @@ def _bylayer_parse(path: str) -> dict:
     reads_by_key: dict = {}
     with open(path, errors="ignore") as fh:
         header = fh.readline().strip().split(",")
+        lengths_exact = "len" in header
         has_prio = "prio" in header
         has_target = "target_barrier" in header      # 2026-09-06 format: exact pass and byte range per read
         for line in fh:
@@ -1462,16 +1558,23 @@ def _bylayer_parse(path: str) -> dict:
             rec_bytes = None
             if has_target and len(r) > 10:
                 try:
-                    b = int(r[7]); rec_bytes = min(int(r[10]), 17_547_264 - int(r[9]))
+                    b = int(r[header.index("target_barrier")]); rec_bytes = int(r[header.index("len")]) if lengths_exact else int(r[10])
                 except ValueError:
                     pass
+            if lengths_exact:
+                try:
+                    rec_bytes = int(r[header.index('len')])
+                    if rec_bytes < 0:
+                        continue
+                except (ValueError, IndexError):
+                    continue
             if src == "read":
                 if expert == 1023 and dur_ns == 0:
                     barriers.setdefault(b, {"layer": layer, "recs": []})["begin"] = t_us / 1000.0
                     continue
                 reads_by_key[(b, layer, expert)] = max(reads_by_key.get((b, layer, expert), 0), dur_ns)
                 continue
-            dev = _BYLAYER_ROLE.get(src)
+            dev = _BYLAYER_ROLE.get(src, src if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", src) else None) or (src if src in ("internal", "Green", "White", "Yellow") else None)
             if not dev:
                 continue
             barriers.setdefault(b, {"layer": layer, "recs": []})["recs"].append([t_us, dev, dur_ns, expert, prio, layer, rec_bytes])
@@ -1511,7 +1614,7 @@ def _bylayer_parse(path: str) -> dict:
     for b in list(barriers):
         info = barriers[b]; keep = []
         for rec in info["recs"]:
-            if not has_target and rec[4] == "P" and rec[5] != info["layer"]:
+            if not has_target and not lengths_exact and rec[4] == "P" and rec[5] != info["layer"]:
                 target = b + ((rec[5] - info["layer"]) % 93)
                 moved.setdefault(target, []).append(rec)
             else:
@@ -1527,7 +1630,7 @@ def _bylayer_parse(path: str) -> dict:
             n_per[(rec[5], rec[3])] = n_per.get((rec[5], rec[3]), 0) + 1
         for rec in info["recs"]:
             rec[6] = rec[6] if rec[6] is not None else 17_547_264 / n_per[(rec[5], rec[3])]
-    devs = ["internal", "White", "Green", "Yellow"]
+    devs = sorted({r[1] for info in barriers.values() for r in info["recs"]})
     per_barrier = []
     last_count = {d: 0 for d in devs}
     wait_for = {d: [] for d in devs}
@@ -1574,15 +1677,17 @@ def _bylayer_parse(path: str) -> dict:
         n = sum(1 for info in barriers.values() for r in info["recs"] if r[1] == d)
         gb = sum(r[6] for info in barriers.values() for r in info["recs"] if r[1] == d) / 1e9
         busy = sum(r[2] for info in barriers.values() for r in info["recs"] if r[1] == d) / 1.0e6
-        span_total = sum(pb["span_ms"] for pb in per_barrier)
-        summary.append({"dev": d, "reads": n, "gb": round(gb, 1), "last_pct": round(100.0 * last_count[d] / nb, 1),
+        ends = [r[0]/1000 for info in barriers.values() for r in info['recs']]
+        starts = [r[0]/1000-r[2]/1e6 for info in barriers.values() for r in info['recs']]
+        span_total = max(ends)-min(starts) if ends else 0
+        summary.append({"dev": d, "reads": n, "bytes": sum(r[6] for info in barriers.values() for r in info["recs"] if r[1] == d), "gb": round(gb, 1), "last_pct": round(100.0 * last_count[d] / nb, 1),
                         "wait_p50": pct(wait_for[d], 0.5), "wait_p90": pct(wait_for[d], 0.9),
                         "wait_total_ms": round(sum(wait_for[d]), 0),
                         "concurrency": round(busy / span_total, 2) if span_total else 0.0})
-    data = {"path": path, "barriers": per_barrier, "summary": summary, "exact_passes": has_target,
+    data = {"path": path, "barriers": per_barrier, "summary": summary, "exact_passes": has_target, "byte_source": "trace lengths" if lengths_exact or has_target else "estimated K3 record size",
             "span_p50": pct([pb["span_ms"] for pb in per_barrier], 0.5),
             "span_p90": pct([pb["span_ms"] for pb in per_barrier], 0.9),
-            "has_prio": has_prio, "records": sum(len(i["recs"]) for i in barriers.values())}
+            "concurrency_basis": "whole trace interval from first read start to last read end", "timing_note": "Last-landing gap describes recorded reads; it is not measured GPU stall or recoverable time. Legacy trace timestamps may be approximate.", "has_prio": has_prio, "records": sum(len(i["recs"]) for i in barriers.values())}
     _BYLAYER_CACHE["key"] = key; _BYLAYER_CACHE["data"] = data; _BYLAYER_CACHE["raw"] = barriers
     return data
 
@@ -1608,11 +1713,13 @@ def bylayer_csv_payload(path: str) -> bytes:
 def bylayer_list_payload() -> bytes:
     import glob
     files = []
-    for f in glob.glob(os.path.join(ROOT, "k3-soak-logs", "*", "readtrace*.csv")):
+    for f in glob.glob(os.path.join(ROOT, "k3-soak-logs", "*", "readtrace*.csv")) + glob.glob(os.path.join(SOAK, "*", "*.readtrace.csv")):
         st = os.stat(f)
         files.append({"path": f, "mtime": st.st_mtime, "mb": round(st.st_size / 1e6, 1)})
     files.sort(key=lambda x: -x["mtime"])
-    return json.dumps({"traces": files}).encode()
+    note = "" if files else ("No per-read traces yet. deltafin: K3_READ_TRACE csv. ds4: apply tools/ds4/apply-read-trace-patch.py, "
+                             "rebuild, then run a trace arm (GLM_TRACE=1 writes <tag>.readtrace.csv next to the log).")
+    return json.dumps({"traces": files, "note": note}).encode()
 
 def bylayer_payload(path: str, barrier: int) -> bytes:
     if not path or not os.path.exists(path):
@@ -1898,17 +2005,17 @@ def experts_payload(trace: str) -> bytes:
     # SUMMED. Consolidating runs answers the question a single run cannot: does
     # routing follow the prompt, or is there a stable set a cache could hold
     # across requests?
-    names = [os.path.basename(t.strip()) for t in (trace or "").split(",") if t.strip()]
-    names = [n for n in names if n.endswith(".jsonl")]
+    names = [t.strip() for t in (trace or "").split(",") if t.strip()]
+    names = [n for n in names if n.endswith((".jsonl", ".hotlist", ".expert.json"))]
     if not names:
-        return json.dumps({"error": "trace must be one or more .jsonl basenames"}).encode()
+        return json.dumps({"error": "trace must be one or more .jsonl / .hotlist / .expert.json names"}).encode()
     paths, stamps = [], []
     for name in names:
-        path = os.path.join(ROOT, name)
+        path = _resolve_trace(name)
         try:
             stamps.append((name, os.path.getmtime(path)))
             paths.append(path)
-        except OSError:
+        except (OSError, TypeError):
             return json.dumps({"error": f"no such trace: {name}", "cells": []}).encode()
     key = tuple(stamps)
     if _experts_cache["key"] == key:
@@ -1921,9 +2028,24 @@ def experts_payload(trace: str) -> bytes:
     steps = 0
     max_layer = 0
     max_expert = 0
+    rec_bytes = REC_BYTES
+    ds4_dims = None
     for index, path in enumerate(paths):
         bit = 1 << index
         run_steps = set()
+        if path.endswith((".hotlist", ".expert.json")):
+            try:
+                c2, nl, ne, st_ = _ds4_counts(path)
+            except Exception as error:
+                return json.dumps({"error": f"{os.path.basename(path)}: {error}", "cells": []}).encode()
+            for k2, v in c2.items():
+                counts[k2] = counts.get(k2, 0) + v
+                seen_in[k2] = seen_in.get(k2, 0) | bit
+                max_layer = max(max_layer, k2 >> 16); max_expert = max(max_expert, k2 & 0xFFFF)
+            ds4_dims = (nl, ne); steps += st_
+            # GLM-5.3 Q4_K routed expert ≈ 20.25 MiB (ds4 log line); K3 record = 17,547,264 B
+            rec_bytes = 20.25 * 2**20
+            continue
         try:
             with open(path, errors="ignore") as fh:
                 for line in fh:
@@ -1981,9 +2103,9 @@ def experts_payload(trace: str) -> bytes:
             # Traffic the band DEMANDED, and the part of it a cache could have
             # served (every route after the first). `per` is traffic per expert
             # — the density that decides which band earns its RAM.
-            "traffic_gib": round(routes * REC_BYTES / 2**30, 1),
-            "cacheable_gib": round(repeats * REC_BYTES / 2**30, 1),
-            "per_expert_gib": round(routes * REC_BYTES / 2**30 / len(sel), 3) if sel else 0,
+            "traffic_gib": round(routes * rec_bytes / 2**30, 1),
+            "cacheable_gib": round(repeats * rec_bytes / 2**30, 1),
+            "per_expert_gib": round(routes * rec_bytes / 2**30 / len(sel), 3) if sel else 0,
         })
     # Cumulative "more than N" counts, which is how the question is usually asked.
     over = {}
@@ -1996,12 +2118,15 @@ def experts_payload(trace: str) -> bytes:
             "experts": len(sel),
             "routes": rts,
             "repeats": rep,
-            "traffic_gib": round(rts * REC_BYTES / 2**30, 1),
-            "cacheable_gib": round(rep * REC_BYTES / 2**30, 1),
-            "per_expert_gib": round(rts * REC_BYTES / 2**30 / len(sel), 3) if sel else 0,
+            "traffic_gib": round(rts * rec_bytes / 2**30, 1),
+            "cacheable_gib": round(rep * rec_bytes / 2**30, 1),
+            "per_expert_gib": round(rts * rec_bytes / 2**30 / len(sel), 3) if sel else 0,
         }
+    if ds4_dims:
+        max_layer = max(max_layer, ds4_dims[0]); max_expert = max(max_expert, ds4_dims[1] - 1)
     body = {
         "trace": ", ".join(names),
+        "rec_bytes": rec_bytes,
         "layers": max_layer,
         "experts": max_expert + 1,
         "steps": steps,
@@ -2031,20 +2156,23 @@ def expertmap4_payload(traces: str, top: int) -> bytes:
     local model root (where K3_ARM_TRACE files land).
     """
     out = []
-    for name in [os.path.basename(t.strip()) for t in (traces or "").split(",") if t.strip()]:
-        if not name.endswith(".jsonl"):
+    for name in [t.strip() for t in (traces or "").split(",") if t.strip()]:
+        if not name.endswith((".jsonl", ".hotlist", ".expert.json")):
             continue
-        path = None
-        for base in (ROOT, os.path.join(ROOT, "deltafin-root-local"),
-                     "/Volumes/Yellow/deltafin-root"):
-            cand = os.path.join(base, name)
-            if os.path.exists(cand):
-                path = cand
-                break
+        path = _resolve_trace(name)
         if path is None:
             out.append({"name": name, "error": "not found", "cells": []})
             continue
         counts: dict = {}
+        if path.endswith((".hotlist", ".expert.json")):
+            try:
+                c2, nl, ne, _ = _ds4_counts(path)
+                counts = {(k >> 16, k & 0xFFFF): v for k, v in c2.items()}
+            except Exception as error:
+                out.append({"name": name, "error": str(error), "cells": []}); continue
+            best = sorted(counts.items(), key=lambda kv: -kv[1])[:max(1, min(top, 500))]
+            out.append({"name": name, "layers": nl, "experts": ne, "cells": [[l, e, c] for (l, e), c in best]})
+            continue
         try:
             with open(path, errors="ignore") as fh:
                 for line in fh:
@@ -2066,10 +2194,50 @@ def expertmap4_payload(traces: str, top: int) -> bytes:
 
 
 def list_traces() -> list:
+    import glob as _glob
+    out = []
     try:
-        return sorted(f for f in os.listdir(ROOT) if f.endswith(".jsonl"))
+        out += sorted(f for f in os.listdir(ROOT) if f.endswith(".jsonl"))
     except OSError:
-        return []
+        pass
+    # ds4 (GLM project): DS4_EXPERT_HOTLIST files (full layer x expert histogram) and
+    # --expert-profile JSON (top 16 per layer) written next to each arm log.
+    for pat in ("*/*.hotlist", "*/*.expert.json"):
+        out += sorted(os.path.relpath(f, SOAK) for f in _glob.glob(os.path.join(SOAK, pat)))
+    return out
+
+
+def _resolve_trace(name: str):
+    for base in (ROOT, SOAK, os.path.join(ROOT, "deltafin-root-local"), "/Volumes/Yellow/deltafin-root"):
+        cand = os.path.join(base, name)
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def _ds4_counts(path: str) -> tuple:
+    """(counts {(layer1based<<16|expert): n}, layers, experts, steps, rec_bytes) from a ds4
+    hotlist ('layer expert hits weight' lines, 0-based layers) or expert-profile JSON."""
+    counts, n_layer, n_expert, steps = {}, 0, 0, 0
+    if path.endswith(".hotlist"):
+        with open(path, errors="ignore") as fh:
+            for line in fh:
+                if line.startswith("#"):
+                    if m := re.match(r"# layers (\d+)", line): n_layer = int(m.group(1))
+                    elif m := re.match(r"# experts (\d+)", line): n_expert = int(m.group(1))
+                    elif m := re.match(r"# layer_records (\d+)", line): steps = int(m.group(1)) // max(n_layer, 1)
+                    continue
+                parts = line.split()
+                if len(parts) >= 3 and int(parts[2]) > 0:
+                    counts[((int(parts[0]) + 1) << 16) | int(parts[1])] = int(parts[2])
+    else:
+        j = json.load(open(path, errors="ignore"))
+        n_layer, n_expert = int(j.get("layers", 0)), int(j.get("experts", 0))
+        steps = int(j.get("layer_records", 0)) // max(n_layer, 1)
+        for L in j.get("layers_detail", j.get("layer_profiles", [])) or []:
+            for e in L.get("top_experts", []):
+                counts[((int(L["layer"]) + 1) << 16) | int(e["id"])] = int(e["count"])
+    return counts, n_layer, n_expert, steps
 
 
 # ------------------------------------------------------------- process tab
@@ -2210,6 +2378,28 @@ def arm_score(marker: dict) -> dict | None:
     return score
 
 
+def live_progress():
+    engines = health.get('engines', [])
+    result = {'engines': engines, 'state': 'unknown' if health.get('engine_detection') != 'ok' else 'idle',
+              'rate': None, 'unit': 'tok/s', 'source': 'unavailable'}
+    if not engines:
+        return result
+    result['state'] = 'engine detected'
+    if any(e['engine'] == 'deltafin' for e in engines) and phases['active']:
+        result.update(rate=phases['tok10'] or None, source='deltafin stats', state=phases['meta'].get('state') or 'running')
+    if any(e['engine'] == 'ds4' for e in engines):
+        import glob
+        marker = _read_marker()
+        paths = [os.path.splitext(marker['log'])[0]+'.chunks'] if marker and marker.get('log') else glob.glob(os.path.join(SOAK, '*', '*.chunks'))
+        if paths:
+            newest = max(paths, key=lambda p: os.path.getmtime(p) if os.path.isfile(p) else 0)
+            # Only a marker can associate a log with a process; otherwise label it as recent telemetry.
+            prog = chunk_progress(newest)
+            if prog and time.time()-prog['last_wall'] < 15:
+                result.update(prog, state='recent response telemetry', associated=bool(marker and marker.get('state') == 'running'))
+    return result
+
+
 def payload() -> bytes:
     with lock:
         now = max((s[-1][0] for s in rates.values() if s), default=0.0)
@@ -2218,31 +2408,26 @@ def payload() -> bytes:
         # Guard every index: with drives unplugged (2-SSD era) a device's
         # series can be empty or shorter than the others; one short list must
         # never 500 the whole payload.
-        n = min((len(v) for v in tr.values() if v), default=0)
-        total = []
-        base = tr.get("internal") or next((v for v in tr.values() if v), [])
-        if n and base:
-            for i in range(min(n, len(base))):
-                vals = [tr[d][i][1] for d in DEVS.values()
-                        if len(tr.get(d) or []) > i]
-                total.append([base[i][0], round(sum(vals), 2)])
-        cur = {k: (s[-1][1] if s else 0.0) for k, s in tr.items()}
+        total = [[t, v] for t, v in total_rates if t >= cut]
+        fresh = time.time()-health['sample_at'] < 2 if health.get('sample_at') else False
+        cur = {k: (s[-1][1] if fresh and s and time.time()-s[-1][0] < 2 else None) for k, s in tr.items() if k in DEVS.values()}
+        total_now = total[-1][1] if fresh and total and time.time()-total[-1][0] < 2 else None
         mh = [m for m in memhist if m[0] >= cut]
         # ACTIVE rate x duty per device over the visible window — the
         # k3-table.py method. A window mean over idle measures the sampler,
         # not the engine (trap of record); these two numbers replace it.
         duty = {}
         for k, v in tr.items():
-            floor = 0.05 * CAP.get(k, 1.0)
+            floor = 0.05 * CAP[k] if CAP.get(k) else 0.5
             act = [x[1] for x in v if x[1] > floor]
             duty[k] = {
                 "duty_pct": round(100 * len(act) / len(v)) if v else 0,
                 "active": round(sum(act) / len(act), 2) if act else 0.0,
             }
         body = dict(traces=tr, total=total, cap=CAP, peaks=dict(peaks),
-                    cur=cur, cur_total=round(sum(cur.values()), 2), sys=dict(sysv),
+                    cur=cur, cur_total=round(total_now, 2) if total_now is not None else None, sys=dict(sysv),
                     health=dict(health), memhist=mh, ram_total=RAM_TOTAL,
-                    dist=weights_map(), staging=staging_status(), duty=duty,
+                    dist={} if OPTIONS.reports_only else weights_map(), staging={} if OPTIONS.reports_only else staging_status(), duty=duty,
                     summer={k: (list(v)[-240:] if k == "hist" else v)
                             for k, v in summer_live.items()},
                     phases={"active": phases["active"], "arm": phases["arm"],
@@ -2260,7 +2445,7 @@ def payload() -> bytes:
                                       else "idle"),
                             "hist": [[t, d] for t, d in phases["hist"]][-240:],
                             "decode_start": phases["decode_start"],
-                            "gb_tok": round(sum(cur.values()) * phases["spt"], 1)})
+                            "gb_tok": None})  # Needs bytes and tokens over the same interval.
         # Burst view: last 10 s, max-in-bucket to <=250 buckets per device —
         # peaks must survive decimation (mean-in-bucket is the exact mistake
         # the 10 ms spec exists to correct). Raw ticks ship when zoomed.
@@ -2286,6 +2471,21 @@ def payload() -> bytes:
         score = arm_score(marker)
         if score:
             body["last_arm"] = score
+    present = sorted(set(DEVS.values()))
+    body["present"] = present
+    body['absent'] = [d['id'] for d in DRIVE_INFO if not d['present']]
+    body['devices'] = DRIVE_INFO
+    body['version'] = VERSION
+    body['mode'] = 'reports' if OPTIONS.reports_only else 'live'
+    body['sample_ms'] = OPTIONS.sample_ms
+    body['health']['scope'] = bool(body['health']['scope'] and fresh)
+    body['health']['sample_age_s'] = round(time.time()-health['sample_at'], 1) if health.get('sample_at') else None
+    body['cap_total'] = sum(CAP[k] for k in present) if present and all(k in CAP for k in present) else None
+    body['runs_path'] = SOAK
+    body['source_path'] = ROOT
+    body['discovery_errors'] = DISCOVERY_ERRORS
+    body['live_progress'] = live_progress()
+    body['system_fresh'] = bool(health.get('system_at') and time.time()-health['system_at'] < 5)
     return json.dumps(body, separators=(",", ":")).encode()
 
 
@@ -2316,12 +2516,12 @@ def peakreader_payload() -> bytes:
         jit = {k: (round(100.0 * _jitter[k] / _jticks[k], 1) if _jticks[k] else 0.0)
                for k in _jitter}
     return json.dumps({"now": now, "devs": devs, "jitter": jit,
-                       "tick_ms": 10}, separators=(",", ":")).encode()
+                       "tick_ms": OPTIONS.sample_ms}, separators=(",", ":")).encode()
 
 
 def burst_dump() -> bytes:
     """Snapshot the burst ring to CSV next to the rung logs (spec §1.4)."""
-    out_dir = os.path.join(ROOT, "k3-soak-logs",
+    out_dir = os.path.join(SOAK,
                            time.strftime("%Y-%m-%d") + "-monitor")
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, time.strftime("burst-%H%M%S.csv"))
@@ -2481,6 +2681,8 @@ class H(http.server.BaseHTTPRequestHandler):
             with lock:
                 for k in peaks:
                     peaks[k] = 0.0
+                for k in _peaktick:
+                    _peaktick[k] = (0, 0, 0)
             b = b'{"ok":true}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -2495,9 +2697,28 @@ class H(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    threading.Thread(target=scope_reader, daemon=True).start()
-    threading.Thread(target=net_reader, daemon=True).start()
-    threading.Thread(target=sys_reader, daemon=True).start()
-    threading.Thread(target=phases_reader, daemon=True).start()
-    print(f"k3-live  ->  http://localhost:{PORT}     (Ctrl-C stops)")
-    http.server.ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+    if OPTIONS.doctor:
+        print(json.dumps({'version': VERSION, 'mode': 'reports' if OPTIONS.reports_only else 'live',
+                          'devices': DRIVE_INFO, 'warnings': DISCOVERY_ERRORS,
+                          'sampler_built': os.path.isfile(os.path.join(ROOT, 'k3-diskscope')),
+                          'runs': SOAK, 'runs_exists': os.path.isdir(SOAK)}, indent=2))
+        raise SystemExit(0)
+    if len(DEVS) > 8:
+        raise SystemExit('The current sampler supports eight disks. Select up to eight physical disks in --config.')
+    if not OPTIONS.reports_only and not os.path.isfile(os.path.join(ROOT, 'k3-diskscope')):
+        raise SystemExit('Sampler missing. Run ./argodrive build, or use --reports-only.')
+    try:
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', PORT), H)
+    except OSError as exc:
+        raise SystemExit(f'Cannot listen on port {PORT}: {exc}. Try --port with another number.')
+    if not OPTIONS.reports_only:
+        if DEVS:
+            threading.Thread(target=scope_reader, daemon=True).start()
+        threading.Thread(target=sys_reader, daemon=True).start()
+        threading.Thread(target=phases_reader, daemon=True).start()
+    print(f"ARGODRIVE {VERSION} -> http://localhost:{PORT} ({'reports only' if OPTIONS.reports_only else 'live'}; Ctrl-C stops)", flush=True)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+        _reap_scopes()

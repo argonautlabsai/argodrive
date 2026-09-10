@@ -1,4 +1,18 @@
-# ArgoDrive tools
+# ARGODRIVE
+
+**Development preview:** local monitoring and saved-run reports for SSD-streamed
+inference. This branch includes the newer ds4/GLM dashboard and measurement fixes.
+
+```sh
+# Inspect saved runs without starting a hardware sampler
+./argodrive run --reports-only --runs /path/to/arms
+```
+
+Open http://localhost:8130. See the [development guide](docs/BETA-DEVELOPMENT.md)
+for live collection, setup diagnostics, supported data and known limitations.
+Python 3.10+ is required; a signed, self-contained Mac download is still to come.
+
+## Original research instruments
 
 Measurement instruments for SSD-streamed mixture-of-experts inference. These
 are the tools that found every gain in the ArgoDrive Deltafin benchmark

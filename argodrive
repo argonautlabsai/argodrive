@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Local development launcher. No inference, model download or placement changes."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(__file__).resolve().parent
+cmd = sys.argv[1] if len(sys.argv) > 1 else 'help'
+if cmd == 'build':
+    subprocess.run(['cc', '-O2', '-o', str(root/'monitor/k3-diskscope'),
+                    str(root/'monitor/k3-diskscope.c'), '-framework', 'IOKit',
+                    '-framework', 'CoreFoundation'], check=True)
+elif cmd in ('run', 'doctor'):
+    args = [sys.executable, str(root/'monitor/k3-live.py')]
+    if cmd == 'doctor':
+        args.append('--doctor')
+    os.execv(sys.executable, args+sys.argv[2:])
+elif cmd == 'test':
+    raise SystemExit(subprocess.call([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], cwd=root))
+else:
+    print('ARGODRIVE development preview\n\n  ./argodrive build\n  ./argodrive doctor\n  ./argodrive run --runs /path/to/arms\n  ./argodrive run --reports-only --runs /path/to/arms\n  ./argodrive test\n\nRun --help after run or doctor for configuration options.')

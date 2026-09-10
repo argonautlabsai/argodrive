@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.pyc
+monitor/k3-diskscope
+monitor/k3-live-marker.json
+*.local.json
