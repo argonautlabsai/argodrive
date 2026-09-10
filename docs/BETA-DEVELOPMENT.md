@@ -60,6 +60,8 @@ establish that it is generating rather than serving idle. Without a marker,
 recent chunks are labelled recent response telemetry rather than attached to a
 particular process.
 
+See [DASHBOARD.md](DASHBOARD.md) for the redesigned views and interaction guide.
+
 ## Measurement changes
 
 - Aggregate live rates use the same start/end interval on every mounted disk;
@@ -87,8 +89,9 @@ particular process.
 - ds4 inclusive throughput and steady decode are distinct. ds4 comparisons
   match model, prompt hash, generation length and recorded context/template/
   sampling fields. Other environmental differences still require review; this
-  is not automatic experimental qualification. Legacy K3 comparisons retain
-  their older matching rules.
+  is not automatic experimental qualification. The product Compare view also blocks claims for
+  legacy K3 logs with missing workload fields; old CSV delta columns retain their
+  historical rules and should not be used to qualify a new comparison.
 - System GPU allocation is not attributed to an engine just because it exists,
   and is not added to process RSS or mapped weights. Memory capacities use
   detected hardware rather than an assumed 128 GiB.
@@ -109,7 +112,8 @@ summaries and inclusive-versus-steady rates. The sampler builds on macOS.
 - Validate live IOKit collection, mount changes and process detection outside
   the development sandbox on another Mac. This development session cannot
   access the host's disk-management service or process list.
-- Add guided folder selection and persist setup through the UI.
+- Add a native folder picker with the Mac shell; path validation and persistent
+  source selection are already available in Settings.
 - Version engine/model telemetry schemas; remove remaining legacy assumptions
   from advanced K3-only tabs and unsupported expert formats.
 - Package the backend and sampler in a native Mac shell, sign and notarize it.
@@ -118,3 +122,16 @@ summaries and inclusive-versus-steady rates. The sampler builds on macOS.
 The existing benchmark harness and placement scripts remain research tools.
 Launching the dashboard does not run inference, download weights, move model
 files or change an engine configuration.
+
+## Product pass verification (10 September)
+
+The redesigned workspace passed 20 Python tests and 8 JavaScript model tests.
+Local HTTP checks exercised the shell/assets, source settings, reports, ds4 run
+details, read timing and expert-profile endpoints. Four saved 128/512-token runs
+were used for the preview, with their original storage, memory and fingerprint
+artifacts. The saved read trace parsed 288,390 records and exactly 408,238,424,064
+bytes. The expert heatmap dimensions come from the supplied profile (79 layers,
+256 experts), rather than an assumed GLM dimension.
+
+These are report/data checks. They do not qualify live sampler overhead, visual
+rendering on other devices, or a downloadable Mac release.

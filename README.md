@@ -1,16 +1,21 @@
 # ARGODRIVE
 
-**Development preview:** local monitoring and saved-run reports for SSD-streamed
-inference. This branch includes the newer ds4/GLM dashboard and measurement fixes.
+**A local performance workspace for SSD-streamed AI.** Inspect runs, compare
+changes and diagnose storage behaviour using your own measurements.
+
+The redesigned product preview includes Overview, Live monitor, Runs, Compare
+and Diagnostics, plus persistent data-source settings and light/dark themes.
 
 ```sh
-# Inspect saved runs without starting a hardware sampler
+# Review saved runs without starting a hardware sampler
 ./argodrive run --reports-only --runs /path/to/arms
 ```
 
-Open http://localhost:8130. See the [development guide](docs/BETA-DEVELOPMENT.md)
-for live collection, setup diagnostics, supported data and known limitations.
-Python 3.10+ is required; a signed, self-contained Mac download is still to come.
+Open http://localhost:8130. Use Settings to validate or change the run folder.
+See the [dashboard guide](docs/DASHBOARD.md) for the product workflow and metric
+definitions, or [development setup](docs/BETA-DEVELOPMENT.md) for live collection.
+Python 3.10+ is required; the UI has no runtime package dependencies. This is a
+local source preview. A signed, self-contained Mac download remains to be built.
 
 ## Original research instruments
 

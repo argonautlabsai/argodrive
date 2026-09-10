@@ -8,7 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
-VERSION = '0.1.0-dev'
+VERSION = '0.2.0-dev'
 
 
 def load_config(path=None):

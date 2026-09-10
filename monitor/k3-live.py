@@ -10,6 +10,8 @@ watched DURING runs, which is exactly when it perturbs them — treat anything
 measured with this open as indicative, not as a promotable number.
 """
 from __future__ import annotations
+import secrets
+from pathlib import Path
 import argparse, sys, atexit, collections, csv, http.server, io, json, os, re, signal, subprocess, threading, time, urllib.parse
 
 # --- diskscope child lifecycle -------------------------------------------
@@ -756,7 +758,16 @@ def staging_status() -> dict:
 
 
 # ------------------------------------------------------------------ stats tab
-SOAK = OPTIONS.runs or CONFIG.get("runs") or os.environ.get("K3_SOAK_DIR") or (
+LOCAL_SETTINGS = Path(ROOT) / 'argodrive.local.json'
+try:
+    SAVED_SETTINGS = json.loads(LOCAL_SETTINGS.read_text())
+    if not isinstance(SAVED_SETTINGS, dict) or not isinstance(SAVED_SETTINGS.get('runs', ''), str):
+        SAVED_SETTINGS = {}
+except (OSError, ValueError):
+    SAVED_SETTINGS = {}
+SOURCE_LOCK = threading.RLock()
+SETTINGS_TOKEN = secrets.token_urlsafe(32)
+SOAK = OPTIONS.runs or CONFIG.get("runs") or SAVED_SETTINGS.get("runs") or os.environ.get("K3_SOAK_DIR") or (
     os.path.join(ROOT, "k3-soak-logs") if os.path.isdir(os.path.join(ROOT, "k3-soak-logs"))
     else os.path.abspath(os.path.join(ROOT, "..", "runs")))   # GLM53/arms (ds4 harness)
 _stats_cache: dict = {"key": None, "val": None}
@@ -768,7 +779,8 @@ _arm_cache: dict = {}
 def _parse_arm_cached(path: str):
     try:
         st = os.stat(path)
-        key = (st.st_mtime, st.st_size)
+        siblings = [Path(path).with_suffix(ext) for ext in ('.csv', '.sys', '.map', '.md5', '.readtrace.csv', '.hotlist', '.expert.json')]
+        key = (st.st_mtime_ns, st.st_size, tuple((f.stat().st_mtime_ns, f.stat().st_size) if f.exists() else None for f in siblings))
     except OSError:
         return None
     hit = _arm_cache.get(path)
@@ -965,13 +977,18 @@ def _parse_arm(path: str) -> dict | None:
             env_line = re.search(r'^DS4_ENV (.*)$', text, re.M)
             if env_line:
                 row['overrides'] = (row.get('overrides', '')+' '+env_line.group(1).strip()).strip()
+            if not row.get('tokens') and isinstance(j.get('tokens_req'), int) and not isinstance(j['tokens_req'], bool) and j['tokens_req'] > 0:
+                row['tokens'] = j['tokens_req']
             n = int(j.get("chunks") or 0); gen = float(j.get("gen_s") or 0); t1 = float(j.get("first_byte_s") or 0)
             row.update(generated=n, elapsed=round(t1 + gen, 2), tok_s=round(n / (t1 + gen), 4) if t1 + gen > 0 else None,
-                       s_tok=(round(gen / n, 3) if n else None), chunks=n, drafts="—", accept=None,
+                       s_tok=(round(gen / (n-1), 3) if n > 1 else None), chunks=n, drafts="—", accept=None,
                        layer_passes=None, first_token_s=round(t1, 2), ds4=True)
             if n > 1 and gen > 0:
                 row["tok_s_steady"] = round(float(j.get("decode_tok_s") or (n - 1) / gen), 4)
                 row["encode_share_pct"] = round(100 * t1 / (t1 + gen), 1) if (t1 + gen) else None
+            row['summary'] = {k: j[k] for k in ('cache_hits', 'cache_misses', 'hit_rate', 'miss_gib', 'pread_s', 'gen_window_gb_per_tok', 'gen_window_gb_by_drive', 'scope_align', 'swap_max_mb', 'swap_growth_mb', 'avail_min_gib', 'ds4_prefill_tps', 'ds4_gen_tps', 'valid', 'dashboard', 'rc') if k in j}
+            row['rate_source'] = 'ds4 harness; response chunks used as generated-token count'
+            if j.get('valid') not in (None, 'ok'): row['incomplete'] = True
             if j.get("hit_rate") is not None: row["cache_hit_pct"] = round(100 * float(j["hit_rate"]), 1)
             if row.get("tokens") and n < row["tokens"]: row["incomplete"] = True
             if int(j.get("rc") or 0) != 0: row["incomplete"] = True
@@ -1003,10 +1020,11 @@ def _parse_arm(path: str) -> dict | None:
         end = re.search(r'^ARM \S+ END (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', text, re.M)
         row['ran'] = end.group(1) if end else time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(path)))
         row['time_source'] = 'harness completion' if end else 'file modification time'
-        prompt = re.search(r'^PROMPT \[(.*)\]$', text, re.M)
+        prompt = re.search(r'^PROMPT \[(.*)\]$', text, re.M) or _RE_PROMPT.search(text.split('\n', 1)[0])
         if prompt:
             import hashlib
             row['prompt_hash'] = hashlib.sha256(prompt.group(1).encode()).hexdigest()
+            row['prompt'] = prompt.group(1)[:160]
         config_line = re.search(r'^CONFIG (.*)$', text, re.M)
         config_fields = dict(re.findall(r'(\w+)=(\S+)', config_line.group(1))) if config_line else {}
         row['comparison_context'] = tuple(config_fields.get(k) for k in ('ctx', 'raw', 'temp', 'think'))
@@ -1064,6 +1082,16 @@ def _parse_arm(path: str) -> dict | None:
     row.update(_parse_csv(path[:-4] + ".csv", path[:-4] + ".map"))
     # Kept under one key so the /stats JSON can drop it wholesale — the browser
     # pivot does not need ~120 settings columns per arm, but the CSV export does.
+    row['engine'] = 'ds4' if row.get('ds4') else 'deltafin' if row.get('model') == 'Kimi K3' else 'unknown'
+    row['artifacts'] = {label: Path(path).with_suffix(ext).is_file() for label, ext in
+                        (('log', '.log'), ('storage', '.csv'), ('memory', '.sys'), ('device_map', '.map'), ('output_hash', '.md5'), ('read_trace', '.readtrace.csv'), ('expert_profile', '.hotlist'))}
+    row['artifacts']['expert_profile'] = any(Path(path).with_suffix(ext).is_file() for ext in ('.hotlist', '.expert.json', '.jsonl'))
+    try:
+        digest = Path(path).with_suffix('.md5').read_text().strip()
+        match = re.search(r'\b[0-9a-fA-F]{32}\b', digest)
+        if match: row['output_hash'] = match.group(0).lower()
+    except OSError:
+        pass
     row["set"] = _arm_settings(text)
     return row
 
@@ -1228,9 +1256,15 @@ def _stats_blocks() -> list:
     key = []
     for d in dirs:
         try:
-            logs = [f for f in os.listdir(d) if _is_arm_log(f)]
-            newest = max((os.path.getmtime(os.path.join(d, f)) for f in logs), default=0)
-            key.append((d, len(logs), round(newest, 1)))
+            names = os.listdir(d)
+            logs = [f for f in names if _is_arm_log(f)]
+            artifacts = []
+            for name in names:
+                if name.endswith(('.log', '.md5', '.sys', '.map', '.csv', '.hotlist', '.expert.json', '.jsonl')):
+                    st = os.stat(os.path.join(d, name))
+                    artifacts.append((name, st.st_mtime_ns, st.st_size))
+            newest = max((x[1] / 1e9 for x in artifacts), default=0)
+            key.append((d, len(logs), newest, tuple(sorted(artifacts))))
         except OSError:
             continue
     key_t = tuple(sorted(key))
@@ -1238,7 +1272,7 @@ def _stats_blocks() -> list:
         return _stats_cache["val"]
 
     blocks = []
-    for d, nlogs, newest in key_t:
+    for d, nlogs, newest, _artifact_signature in key_t:
         if not nlogs:
             continue
         rows = []
@@ -1877,7 +1911,7 @@ def scheduler_csv(frm: str = "", to: str = "", only_block: str = "") -> bytes:
             arm = name[:-4]
             path = os.path.join(bdir, name)
             try:
-                text = open(path, errors="ignore").read()
+                text = Path(path).read_text(errors='ignore')
             except OSError:
                 continue
             m = re.search(r"\[mirror-split\] internal=(\d+) K3C=(\d+) K3B=(\d+) K3A=(\d+)", text)
@@ -1951,7 +1985,7 @@ def arm_detail(block: str, arm: str) -> bytes:
     if not os.path.isfile(path):
         return json.dumps({"error": f"no such arm: {block}/{arm}"}).encode()
     try:
-        text = open(path, errors="ignore").read()
+        text = Path(path).read_text(errors='ignore')
     except OSError as error:
         return json.dumps({"error": str(error)}).encode()
 
@@ -1980,6 +2014,15 @@ def arm_detail(block: str, arm: str) -> bytes:
         if hits:
             tail[tag.strip("[]")] = hits[-1]
     out["counters"] = tail
+    if m := re.search(r'^PROMPT \[(.*)\]$', text, re.M): out['prompt'] = m.group(1)
+    if m := re.search(r'^CONFIG (.*)$', text, re.M): out['config'] = dict(re.findall(r'(\w+)=(\S+)', m.group(1)))
+    if m := re.search(r'^DS4_ENV (.*)$', text, re.M): out['environment'] = dict(re.findall(r'(\w+)=(\S+)', m.group(1)))
+    if m := re.search(r'^ENGINE (.*)$', text, re.M): out['engine_build'] = m.group(1)
+    if m := _RE_DS4_SUMMARY.search(text):
+        try: out['summary'] = json.loads(m.group(0))
+        except ValueError: pass
+    out['settings'] = _arm_settings(text)
+    out['row'] = _parse_arm_cached(path)
     return json.dumps(out, separators=(",", ":")).encode()
 
 
@@ -2202,7 +2245,7 @@ def list_traces() -> list:
         pass
     # ds4 (GLM project): DS4_EXPERT_HOTLIST files (full layer x expert histogram) and
     # --expert-profile JSON (top 16 per layer) written next to each arm log.
-    for pat in ("*/*.hotlist", "*/*.expert.json"):
+    for pat in ("*/*.hotlist", "*/*.expert.json", "*/*.jsonl"):
         out += sorted(os.path.relpath(f, SOAK) for f in _glob.glob(os.path.join(SOAK, pat)))
     return out
 
@@ -2427,7 +2470,7 @@ def payload() -> bytes:
         body = dict(traces=tr, total=total, cap=CAP, peaks=dict(peaks),
                     cur=cur, cur_total=round(total_now, 2) if total_now is not None else None, sys=dict(sysv),
                     health=dict(health), memhist=mh, ram_total=RAM_TOTAL,
-                    dist={} if OPTIONS.reports_only else weights_map(), staging={} if OPTIONS.reports_only else staging_status(), duty=duty,
+                    dist={}, staging={}, duty=duty,
                     summer={k: (list(v)[-240:] if k == "hist" else v)
                             for k, v in summer_live.items()},
                     phases={"active": phases["active"], "arm": phases["arm"],
@@ -2550,13 +2593,101 @@ def page() -> bytes:
         return b"<h1>k3-live-page.html missing</h1>"
 
 
+def source_info(path):
+    folder = Path(path).expanduser().resolve()
+    if not folder.is_dir():
+        raise ValueError('Choose an existing folder containing run folders or .log files.')
+    blocks = [p for p in folder.iterdir() if p.is_dir()]
+    count = sum(1 for b in blocks for f in b.glob('*.log') if _is_arm_log(f.name))
+    direct = sum(1 for f in folder.glob('*.log') if _is_arm_log(f.name))
+    if direct and not count:
+        raise ValueError('This is a single run folder. Choose its parent: ' + str(folder.parent))
+    return {'runs': str(folder), 'logs': count, 'blocks': len(blocks)}
+
+
+def settings_payload():
+    return {'runs': SOAK, 'exists': os.path.isdir(SOAK), 'mode': 'reports' if OPTIONS.reports_only else 'live',
+            'sample_ms': OPTIONS.sample_ms, 'token': SETTINGS_TOKEN, 'version': VERSION,
+            'persisted_runs': SAVED_SETTINGS.get('runs'), 'cli_override': bool(OPTIONS.runs or CONFIG.get('runs'))}
+
+
+def apply_source(path, validate_only=False):
+    global SOAK, SAVED_SETTINGS
+    info = source_info(path)
+    if not validate_only:
+        saved = {**SAVED_SETTINGS, 'runs': info['runs']}
+        temporary = LOCAL_SETTINGS.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(saved, indent=2) + '\n')
+        temporary.replace(LOCAL_SETTINGS)
+        SOAK = info['runs']
+        SAVED_SETTINGS = saved
+        _stats_cache.update(key=None, val=None)
+        _arm_cache.clear()
+        _BYLAYER_CACHE.clear()
+        _experts_cache.update(key=None, val=b'{}')
+    return {**info, 'applied': not validate_only}
+
+
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):  # silence per-request logging
         pass
 
+    def local_host(self):
+        try:
+            hostname = urllib.parse.urlsplit('http://' + self.headers.get('Host', '')).hostname
+        except ValueError:
+            hostname = None
+        if hostname not in ('localhost', '127.0.0.1', '::1'):
+            self.send_error(403, 'This is a localhost application.')
+            return False
+        return True
+
+    def do_POST(self):
+        if not self.local_host(): return
+        expected = 'http://' + self.headers.get('Host', '')
+        if self.headers.get('Origin') != expected or self.headers.get('X-Argodrive-Token') != SETTINGS_TOKEN:
+            self.send_error(403, 'Open Settings in ARGODRIVE to change the data source.')
+            return
+        if self.path != '/settings':
+            self.send_error(404)
+            return
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if not 0 < size <= 8192: raise ValueError('Invalid settings request size')
+            body = json.loads(self.rfile.read(size))
+            if not isinstance(body, dict) or not isinstance(body.get('runs'), str): raise ValueError('A folder path is required')
+            with SOURCE_LOCK:
+                result = apply_source(body['runs'], body.get('validate_only') is True)
+            status = 200
+        except (ValueError, OSError) as exc:
+            result, status = {'error': str(exc)}, 400
+        b = json.dumps(result).encode()
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Length', str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
     def do_GET(self):
+        if not self.local_host(): return
+        # Trace parsers retain a one-file cache. Serialize report/source operations.
+        with SOURCE_LOCK:
+            self.get_response()
+
+    def get_response(self):
         p = urllib.parse.urlparse(self.path).path
-        if p == "/data":
+        if p in ('/app.css', '/app.js', '/app-model.js'):
+            b = Path(ROOT, p[1:]).read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/css' if p.endswith('.css') else 'text/javascript')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/settings':
+            b = json.dumps(settings_payload()).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == "/data":
             b = payload()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -2566,11 +2697,9 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
-        elif p == "/burstdump":
-            b = burst_dump()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Cache-Control", "no-store")
+        elif p in ('/burstdump', '/reset'):
+            self.send_error(405, 'Legacy mutation endpoints are not available in the product interface.')
+            return
         elif p == "/bylayer.csv":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             tr = (q.get("trace") or [""])[0]
@@ -2677,20 +2806,14 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Disposition",
                              f'attachment; filename="k3-telemetry_{span}.csv"')
             self.send_header("Cache-Control", "no-store")
-        elif p == "/reset":
-            with lock:
-                for k in peaks:
-                    peaks[k] = 0.0
-                for k in _peaktick:
-                    _peaktick[k] = (0, 0, 0)
-            b = b'{"ok":true}'
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-        else:
+        elif p == "/":
             b = page()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store, must-revalidate")
+        else:
+            self.send_error(404)
+            return
         self.send_header("Content-Length", str(len(b)))
         self.end_headers()
         self.wfile.write(b)
