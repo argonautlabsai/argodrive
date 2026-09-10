@@ -2,7 +2,9 @@
 
 ARGODRIVE helps users understand and improve local AI inference with recorded
 measurements. The interface is organised around five jobs, with setup in Settings.
-It runs on localhost; this source preview does not yet include a signed Mac app.
+It runs on localhost, either in a browser or in the new native Mac wrapper.
+The initial downloadable build is an ad-hoc-signed technical preview, not a
+Developer ID–signed/notarized release. See [MAC-BETA-RELEASE.md](MAC-BETA-RELEASE.md).
 
 The longer-term direction is distributed inference across Macs, RAM and SSDs.
 This monitor is its measurement foundation; see
@@ -126,5 +128,5 @@ filtering. No browser automation or new inference benchmark was run for this pas
 Before an external beta: perform browser/accessibility review at several window
 sizes; validate live hardware collection on another Mac; measure collection
 cost; version engine telemetry schemas; and package, sign and notarize the Mac
-application. Source selection currently uses an editable path; a native folder
-picker belongs with the Mac shell.
+application. The Mac wrapper now includes a native folder picker and export Save dialogs.
+These still need clean-install validation on another Mac.

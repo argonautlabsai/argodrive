@@ -112,11 +112,11 @@ summaries and inclusive-versus-steady rates. The sampler builds on macOS.
 - Validate live IOKit collection, mount changes and process detection outside
   the development sandbox on another Mac. This development session cannot
   access the host's disk-management service or process list.
-- Add a native folder picker with the Mac shell; path validation and persistent
-  source selection are already available in Settings.
+- Validate the new Mac shell, native folder picker and exports on an independent
+  Mac; path validation and persistent source selection are implemented.
 - Version engine/model telemetry schemas; remove remaining legacy assumptions
   from advanced K3-only tabs and unsupported expert formats.
-- Package the backend and sampler in a native Mac shell, sign and notarize it.
+- Obtain Developer ID and notarize the new self-contained Mac technical preview.
 - Check end-to-end collection overhead and recruit independent testers.
 
 The existing benchmark harness and placement scripts remain research tools.
@@ -135,3 +135,15 @@ bytes. The expert heatmap dimensions come from the supplied profile (79 layers,
 
 These are report/data checks. They do not qualify live sampler overhead, visual
 rendering on other devices, or a downloadable Mac release.
+
+## Mac package verification (10 September)
+
+The new native window opened the dashboard from its bundled backend. The final
+package embeds Python 3.12.14 and has no linked dependency on the developer's
+Python/Homebrew paths. The package smoke test verifies report startup with invalid
+external PYTHONHOME/PYTHONPATH, local assets, source selection, immutable source
+files, CSV export, persisted restart, parent identity refusal and termination.
+All 28 existing automated tests pass. The `.app` passes strict recursive code
+signature verification using ad-hoc signatures; this is not notarization or a
+Gatekeeper acceptance test. Native folder selection/export and live collection
+still need hands-on testing on another Mac before public release.

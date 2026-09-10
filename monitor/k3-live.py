@@ -52,7 +52,10 @@ from argodrive_core import (VERSION, load_config, discover_drives, CounterBucket
 
 def arguments():
     parser = argparse.ArgumentParser(description="ARGODRIVE local inference monitor and saved-run reports")
-    parser.add_argument('--port', type=int, default=8130)
+    parser.add_argument('--port', type=int, default=8130, help='Local port; 0 selects a free port')
+    parser.add_argument('--state-dir', help='Writable application settings directory')
+    parser.add_argument('--ready-file', help=argparse.SUPPRESS)
+    parser.add_argument('--parent-pid', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--config', help='Optional JSON hardware configuration')
     parser.add_argument('--runs', help='Directory containing benchmark block directories')
     parser.add_argument('--marker', help='Live harness marker JSON (optional)')
@@ -60,8 +63,8 @@ def arguments():
     parser.add_argument('--doctor', action='store_true', help='Print setup diagnostics and exit')
     parser.add_argument('--sample-ms', type=int, choices=(10, 100, 200), default=100)
     opts = parser.parse_args() if __name__ == '__main__' else parser.parse_args(['--reports-only'])
-    if not 1024 <= opts.port <= 65535:
-        parser.error('--port must be between 1024 and 65535')
+    if opts.port != 0 and not 1024 <= opts.port <= 65535:
+        parser.error('--port must be 0 or between 1024 and 65535')
     try:
         config = load_config(opts.config)
     except (OSError, ValueError) as exc:
@@ -155,7 +158,7 @@ CAP = {d["id"]: d["ceiling_gbps"] for d in DRIVE_INFO if d["ceiling_gbps"] is no
 # RECEIVED on the bridge member port are the M1's contribution; capacity is
 # the measured one-cable payload ceiling (4.7 GB/s, 2026-09-04).
 NET_DEVS = {}  # Network traffic is not physical SSD traffic.
-WINDOW = 30.0    # was 120; longer windows squeeze the 200 ms bars illegibly
+WINDOW = 120.0  # Matches the product timeline; samples keep their actual intervals.
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CSV = os.environ.get("K3_SCOPE_CSV", f"/tmp/argodrive_scope_{PORT}_{os.getpid()}.csv")
 
@@ -758,7 +761,8 @@ def staging_status() -> dict:
 
 
 # ------------------------------------------------------------------ stats tab
-LOCAL_SETTINGS = Path(ROOT) / 'argodrive.local.json'
+STATE_DIR = Path(OPTIONS.state_dir).expanduser() if OPTIONS.state_dir else (Path.home() / 'Library/Application Support/ARGODRIVE' if getattr(sys, 'frozen', False) else Path(ROOT))
+LOCAL_SETTINGS = STATE_DIR / 'argodrive.local.json'
 try:
     SAVED_SETTINGS = json.loads(LOCAL_SETTINGS.read_text())
     if not isinstance(SAVED_SETTINGS, dict) or not isinstance(SAVED_SETTINGS.get('runs', ''), str):
@@ -769,7 +773,7 @@ SOURCE_LOCK = threading.RLock()
 SETTINGS_TOKEN = secrets.token_urlsafe(32)
 SOAK = OPTIONS.runs or CONFIG.get("runs") or SAVED_SETTINGS.get("runs") or os.environ.get("K3_SOAK_DIR") or (
     os.path.join(ROOT, "k3-soak-logs") if os.path.isdir(os.path.join(ROOT, "k3-soak-logs"))
-    else os.path.abspath(os.path.join(ROOT, "..", "runs")))   # GLM53/arms (ds4 harness)
+    else str(STATE_DIR / "runs") if OPTIONS.state_dir or getattr(sys, "frozen", False) else os.path.abspath(os.path.join(ROOT, "..", "runs")))   # GLM53/arms (ds4 harness)
 _stats_cache: dict = {"key": None, "val": None}
 # Per-log parse memo: a tree rebuild (any new arm) used to re-parse every log
 # (1,445 logs = 18 s per /stats request, which the page times out on). Rows
@@ -2616,6 +2620,7 @@ def apply_source(path, validate_only=False):
     info = source_info(path)
     if not validate_only:
         saved = {**SAVED_SETTINGS, 'runs': info['runs']}
+        LOCAL_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
         temporary = LOCAL_SETTINGS.with_suffix('.json.tmp')
         temporary.write_text(json.dumps(saved, indent=2) + '\n')
         temporary.replace(LOCAL_SETTINGS)
@@ -2819,7 +2824,20 @@ class H(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b)
 
 
+def watch_parent(pid):
+    # A killed native window must not leave a sampler running indefinitely.
+    while True:
+        time.sleep(1)
+        if os.getppid() != pid:
+            _reap_scopes()
+            os._exit(0)
+
+
 if __name__ == "__main__":
+    if OPTIONS.parent_pid:
+        if os.getppid() != OPTIONS.parent_pid:
+            raise SystemExit('The launching app is no longer running.')
+        threading.Thread(target=watch_parent, args=(OPTIONS.parent_pid,), daemon=True).start()
     if OPTIONS.doctor:
         print(json.dumps({'version': VERSION, 'mode': 'reports' if OPTIONS.reports_only else 'live',
                           'devices': DRIVE_INFO, 'warnings': DISCOVERY_ERRORS,
@@ -2834,6 +2852,11 @@ if __name__ == "__main__":
         server = http.server.ThreadingHTTPServer(('127.0.0.1', PORT), H)
     except OSError as exc:
         raise SystemExit(f'Cannot listen on port {PORT}: {exc}. Try --port with another number.')
+    PORT = server.server_address[1]
+    if OPTIONS.ready_file:
+        ready = Path(OPTIONS.ready_file)
+        ready.parent.mkdir(parents=True, exist_ok=True)
+        ready.write_text(json.dumps({'port': PORT, 'pid': os.getpid(), 'version': VERSION}))
     if not OPTIONS.reports_only:
         if DEVS:
             threading.Thread(target=scope_reader, daemon=True).start()

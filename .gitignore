@@ -4,3 +4,6 @@ __pycache__/
 monitor/k3-diskscope
 monitor/k3-live-marker.json
 *.local.json
+.build/
+dist/
+*.local.json.tmp

@@ -14,8 +14,9 @@ and Diagnostics, plus persistent data-source settings and light/dark themes.
 Open http://localhost:8130. Use Settings to validate or change the run folder.
 See the [dashboard guide](docs/DASHBOARD.md) for the product workflow and metric
 definitions, or [development setup](docs/BETA-DEVELOPMENT.md) for live collection.
-Python 3.10+ is required; the UI has no runtime package dependencies. This is a
-local source preview. A signed, self-contained Mac download remains to be built.
+Python 3.10+ is required; the UI has no runtime package dependencies. A self-contained Apple-silicon Mac technical preview can now be built with
+[scripts/build-macos.py](scripts/build-macos.py). The initial build is ad-hoc signed
+and not notarized; see [Mac beta release instructions](docs/MAC-BETA-RELEASE.md).
 
 ## Product direction
 
