@@ -4,6 +4,11 @@ ARGODRIVE helps users understand and improve local AI inference with recorded
 measurements. The interface is organised around five jobs, with setup in Settings.
 It runs on localhost; this source preview does not yet include a signed Mac app.
 
+The longer-term direction is distributed inference across Macs, RAM and SSDs.
+This monitor is its measurement foundation; see
+[PRODUCT-DIRECTION.md](PRODUCT-DIRECTION.md) for the planned cluster, model and
+expert-placement controls. The view list below describes implemented features.
+
 ## Product navigation
 
 | View | Purpose | What is available |

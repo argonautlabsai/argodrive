@@ -17,6 +17,15 @@ definitions, or [development setup](docs/BETA-DEVELOPMENT.md) for live collectio
 Python 3.10+ is required; the UI has no runtime package dependencies. This is a
 local source preview. A signed, self-contained Mac download remains to be built.
 
+## Product direction
+
+ARGODRIVE is intended to grow into a distributed inference system that coordinates
+Macs, local and remote expert RAM caches, and SSDs. The current release is the
+local measurement foundation. Cluster management, RDMA and peer-cache execution
+are planned capabilities, not implemented features.
+
+See [the product direction and staged architecture](docs/PRODUCT-DIRECTION.md).
+
 ## Original research instruments
 
 Measurement instruments for SSD-streamed mixture-of-experts inference. These
