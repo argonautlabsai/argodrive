@@ -1,10 +1,15 @@
 # ARGODRIVE
 
-**A local performance workspace for SSD-streamed AI.** Inspect runs, compare
-changes and diagnose storage behaviour using your own measurements.
+**An expert-streaming optimiser for local AI.** ARGODRIVE's product goal is to
+test your SSDs and find effective streaming settings for your model and workload,
+then show the measured improvement in response time and generation speed.
 
-The redesigned product preview includes Overview, Live monitor, Runs, Compare
-and Diagnostics, plus persistent data-source settings and light/dark themes.
+The current Mac technical preview provides Overview, Live monitor, Runs, Compare
+and Diagnostics, plus dedicated SSD charts, saved Streaming configurations, persistent data-source settings and light/dark themes.
+Drive tests, benchmark harnesses and expert-placement tools also exist in the
+source repository as separate research scripts. The guided test → tune → validate
+→ save-settings workflow is the next product milestone; it is not yet integrated
+into the downloadable app. See the [streaming optimiser plan](docs/STREAMING-OPTIMIZER.md).
 
 ```sh
 # Review saved runs without starting a hardware sampler
@@ -18,12 +23,28 @@ Python 3.10+ is required; the UI has no runtime package dependencies. A self-con
 [scripts/build-macos.py](scripts/build-macos.py). The initial build is ad-hoc signed
 and not notarized; see [Mac beta release instructions](docs/MAC-BETA-RELEASE.md).
 
+## Model support in the local Beta 3 build
+
+| Model family | Engine | Current scope |
+|---|---|---|
+| Kimi K3 | Deltafin | Recorded-run analysis and streaming evidence |
+| GLM 5.3 | Argonaut ds4 fork | Recorded runs, candidate profiles and qualified campaign evidence |
+| DeepSeek V4.1 Flash | Current ds4 Metal | Experimental profiles, download/capacity readiness and a separate baseline CLI |
+
+V4.1 inference and two-enclosure tuning are awaiting local qualification. The
+GLM fork's replica settings are not available in the fresh upstream engine.
+See [V4.1 preparation and test procedure](docs/DEEPSEEK41.md).
+
 ## Product direction
 
-ARGODRIVE is intended to grow into a distributed inference system that coordinates
-Macs, local and remote expert RAM caches, and SSDs. The current release is the
-local measurement foundation. Cluster management, RDMA and peer-cache execution
-are planned capabilities, not implemented features.
+First, turn SSD calibration and model-specific streaming experiments into a
+guided workflow on one Mac. Compare supported read methods, per-drive work
+allocation, reader concurrency, prefetch and expert-cache budgets using real
+inference runs. The dashboard is the interface for this workflow and its evidence.
+
+Then extend the same model to multiple Macs, local and remote expert RAM caches,
+and SSDs. Cluster management, RDMA and peer-cache execution are planned
+capabilities, not implemented features.
 
 See [the product direction and staged architecture](docs/PRODUCT-DIRECTION.md).
 
@@ -80,6 +101,7 @@ the chart script in the benchmark package
 | `drives/` | `k3-drive-map.py`, `k3-drive-names.example.json` | which physical drive is which — model, serial, whole-disk, bus, direct port or hub — and drift against the last snapshot; run after any replug |
 | `placement/` | `k3-regen-manifests.py` | regenerate and verify placement manifests from the live directories |
 | `placement/` | `k3-stage-wider-bands.py` | widen replica bands by traffic share from a usage trace, with a manifest and rollback script per band |
+| `scripts/` | `kimi-deltafin-profile.py` | print the Deltafin Kimi replica/ETA candidate and verify path filesystem identities without changing model data |
 
 ## How they were used
 
@@ -92,12 +114,25 @@ dashboard server stopped (its sampler costs about one percent). Read traces
 `k3-trace-gaps.py` and the dashboard's by-layer view, never used for speed
 figures. Drive ceilings were measured with the engine idle.
 
-## What these tools are not
+## Current implementation boundary
 
-They are not a product and not general-purpose: the sampler and the harness
-assume macOS, the deltafin engine's log format and its `K3_*` environment
-knobs. Nothing here schedules reads or changes the engine; these are
-instruments only.
+The local **0.2.0-beta.2** build adds an experimental Cluster tab with saved M1
+qualification evidence, plus native one-link expert transfer tools. A real
+Thunderbolt run verified 1,000 requests against a 200-record K3 sample at
+1.30 GB/s of transfer time. This is a transport result, not a decode speedup.
+Multipath, remote RAM caching, RDMA and ds4 integration remain unimplemented.
+See [wire/README.md](wire/README.md) and [wire/BENCH.md](wire/BENCH.md).
+
+The packaged app monitors and compares measurements. The separate research
+scripts can test reads, run configured benchmark arms and prepare expert replicas;
+many still assume the reference machine's paths and deltafin's `K3_*` settings.
+They need adaptation before use on another setup.
+
+The engine performs the actual expert reads and scheduling. ARGODRIVE's next
+step is to select, test and export settings through versioned engine adapters.
+An integrated automatic tuner and runtime adaptation to changing load are not
+implemented yet. A standalone SSD result alone does not establish the fastest
+inference configuration.
 
 ## Licence
 
