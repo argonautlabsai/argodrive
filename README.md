@@ -145,6 +145,10 @@ An integrated automatic tuner and runtime adaptation to changing load are not
 implemented yet. A standalone SSD result alone does not establish the fastest
 inference configuration.
 
+## Development acknowledgements
+
+Claude, ChatGPT and OpenAI Codex assisted with development and review. Their use is acknowledged here; private chat histories are not part of this repository. Performance and correctness claims are supported by the stated tests and measurements, with limitations recorded separately.
+
 ## Licence
 
 MIT.
