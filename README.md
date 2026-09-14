@@ -70,6 +70,10 @@ assume macOS, the deltafin engine's log format and its `K3_*` environment
 knobs. Nothing here schedules reads or changes the engine; these are
 instruments only.
 
+## Development acknowledgements
+
+Claude, ChatGPT and OpenAI Codex assisted with development and review. Their use is acknowledged here; private chat histories are not part of this repository. Performance and correctness claims are supported by the stated tests and measurements, with limitations recorded separately.
+
 ## Licence
 
 MIT.
