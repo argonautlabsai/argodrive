@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "captured_at": null,
+  "node": {
+    "name": "Example expert node",
+    "memory_gib": null,
+    "os": ""
+  },
+  "network": {
+    "connected_links": 0,
+    "independent_links": 0,
+    "planned_links": 0,
+    "transport": "TCP"
+  },
+  "network_test": {"cases": []},
+  "expert_test": {"cases": []},
+  "pipeline_test": {"profiles": [], "cases": []},
+  "inference_test": {"cases": []},
+  "s0": {"scenarios": [], "limitations": []},
+  "s1": {},
+  "gates": [],
+  "ssd_probe": {"results": []},
+  "limitations": [
+    "No hardware or model data is included in the application package."
+  ]
+}

@@ -46,7 +46,7 @@ def main():
     freeze = [args.python,'-m','PyInstaller','--noconfirm','--clean','--onedir','--name','argodrive-server',
               '--target-arch','arm64','--distpath',BUILD/'frozen','--workpath',BUILD/'freeze-work','--specpath',BUILD,
               '--paths',ROOT/'monitor','--add-binary',str(BUILD/'k3-diskscope')+':.', '--log-level','WARN']
-    for name in ['k3-live-page.html','app.css','app.js','app-model.js','topology-view.js','cluster-view.js','spotlight-view.js','engine-settings.js','campaign-view.js','model-support.js','ssd-tuner-view.js','benchmark-view.js','engram-monitor-view.js','cluster-evidence.json']:
+    for name in ['k3-live-page.html','app.css','app.js','app-model.js','topology-view.js','cluster-view.js','spotlight-view.js','engine-settings.js','campaign-view.js','model-support.js','ssd-tuner-view.js','benchmark-view.js','engram-monitor-view.js','cluster-evidence.example.json']:
         freeze += ['--add-data',str(ROOT/'monitor'/name)+':.']
     # The Monitor test dialog can launch the verified DeepSeek V4.1 profile in
     # addition to the legacy GLM harness.  It is imported lazily by the worker,

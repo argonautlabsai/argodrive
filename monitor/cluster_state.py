@@ -19,7 +19,15 @@ def strings(value):
 
 def cluster_snapshot(state_dir, bundle_dir):
     local=Path(state_dir)/'wire'/'status.json'
-    reference=Path(bundle_dir)/'cluster-evidence.json'
+    # The app ships only a schema-safe example. A development run may provide
+    # a private report in state_dir/wire/status.json, but that file is never
+    # copied into a public build.
+    reference=Path(bundle_dir)/'cluster-evidence.example.json'
+    # Keep older local development bundles readable; build-macos.py never
+    # copies this legacy filename into a public app.
+    legacy=Path(bundle_dir)/'cluster-evidence.json'
+    if not reference.exists() and legacy.exists():
+        reference=legacy
     source=local if local.exists() else reference
     result={'schema':1,'source':'local_session' if source==local else 'bundled_reference',
             'live':False,'engine_integrated':False,'gates':[],'s0':{},'s1':{},'node':{},'ssd_probe':{},
