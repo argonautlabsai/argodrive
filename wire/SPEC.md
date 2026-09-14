@@ -3,7 +3,7 @@
 **Remote expert node over multipath Thunderbolt, prototype on M1 Max → M5 Max**
 
 Version 1.0 · 11 September 2026 · Argonaut Labs
-For: the Claude terminal session. Build in the order given; each stage has a gate.
+Implementation sequence: build in the order given; each stage has a validation gate.
 
 ---
 
