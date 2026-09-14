@@ -4,6 +4,9 @@
 test your SSDs and find effective streaming settings for your model and workload,
 then show the measured improvement in response time and generation speed.
 
+The V4.1 engine integration lives in the
+[Argonaut Argodrive DS4 fork](https://github.com/argonautlabsai/ds4/tree/argonaut-v41).
+
 The current Mac technical preview provides Overview, Live monitor, Runs, Compare
 and Diagnostics, plus dedicated SSD charts, saved Streaming configurations, persistent data-source settings and light/dark themes.
 Drive tests, benchmark harnesses and expert-placement tools also exist in the
