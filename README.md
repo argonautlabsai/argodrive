@@ -1,5 +1,14 @@
 # ARGODRIVE
 
+## Download and test the beta
+
+[**Download ARGODRIVE for Apple silicon**](https://github.com/argonautlabsai/argodrive/releases/tag/v0.2.0-beta.3) · [**Installation and testing guide**](https://github.com/argonautlabsai/argodrive/blob/beta-20260914/docs/BETA-TESTING.md) · [**Beta source**](https://github.com/argonautlabsai/argodrive/tree/beta-20260914)
+
+Open Live Hardware to check connected drives, memory and activity. Choose a folder of supported benchmark runs to inspect results and compare configurations. Report launch, drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues). Review any attachments for private paths and prompts before sharing.
+
+This is a monitoring and saved-run analysis preview, not an automatic optimizer. The app does not include model weights. Engine tests use the separate [complete V4.1 fork and reproduction recipe](https://github.com/argonautlabsai/ds4/tree/argonaut-v41-benchmark). The beta is ad-hoc signed and not notarized; see the testing guide before installing.
+
+
 **An expert-streaming optimiser for local AI.** ARGODRIVE's product goal is to
 test your SSDs and find effective streaming settings for your model and workload,
 then show the measured improvement in response time and generation speed.
