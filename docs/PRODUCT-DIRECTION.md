@@ -1,17 +1,23 @@
-# ARGODRIVE: distributed inference across Macs, memory and SSDs
+# ARGODRIVE: expert-streaming optimisation across memory and SSDs
 
 Product direction recorded 10 September 2026 following the owner's clarification.
 This describes the target architecture. The current 0.2 preview implements local
 monitoring and saved-run analysis; it has no cluster, peer-cache or RDMA runtime.
+The repository also contains standalone drive tests, benchmark harnesses and
+placement tools. They are not yet a guided optimiser in the Mac app.
 
 ## Product promise
 
-Run large models across the Macs and drives you already own, with automatic
-placement and clear evidence of what limits performance.
+Find effective expert-streaming settings for the model, workload, memory and
+drives you have. Test storage, compare supported engine configurations, validate
+the improvement and save a reusable profile. Extend this to cooperating Macs
+and peer RAM as the distributed data path becomes available.
 
-The dashboard is the future control surface for that system. Storage scheduling,
-expert placement and memory reuse are core product capabilities. The research
-instruments remain valuable as the means of validating the scheduler.
+The dashboard is the interface for that system. SSD testing, streaming-method
+selection, storage scheduling, expert placement and memory reuse belong to the
+core product. Integrating the existing research instruments into this workflow
+comes before the cluster work. See [STREAMING-OPTIMIZER.md](STREAMING-OPTIMIZER.md)
+for the current inventory, qualification rules and first implementation scope.
 
 The proposed differentiator is coordinated placement across local RAM, peer RAM
 and multiple SSDs for mixture-of-experts inference. Whether it outperforms other
@@ -58,6 +64,7 @@ connected and successfully measured RDMA states.
 | Area | User's job | Evolution from the current preview |
 | --- | --- | --- |
 | Overview | See available capacity and current workloads | Add selected cluster, active model instances, node health and request performance |
+| Optimise streaming | Test drives and choose settings for a model and workload | Integrate calibration, a bounded engine-specific search, repeated comparisons and profile export; this is the next local milestone |
 | Models | Choose, place and serve a model | Add inventory, compatible engines, placement preview, memory budget, start/stop and API endpoint |
 | Cluster | Understand and manage connected Macs | Add paired nodes, roles, port/link topology, measured bandwidth/latency and health |
 | Memory & storage | Control where expert weights live | Elevate expert placement, local/remote RAM budgets, SSD replicas, cache activity and migration |
@@ -90,6 +97,9 @@ flowchart TB
 - **Coordinator:** authenticated membership, topology, reservations, model
   placement, request admission and metrics. Python is suitable for the first
   implementation; isolate it from the byte-transfer path.
+- **Optimiser:** read capability declarations, plan bounded experiments, verify
+  resolved engine settings and retain measured profiles. Begin with explicit
+  tuning sessions; automatic changes during serving require separate validation.
 - **Node agent:** stable node identity, inventory, memory budgets, health and
   versioned engine/transport capabilities. A single Mac is a one-node cluster.
 - **Engine adapter:** ds4/deltafin first; investigate MLX/Exo separately. Expose
@@ -138,6 +148,7 @@ prevent reuse of an evicted buffer. Verify local fallback after peer failure.
 
 | Stage | Deliverable | Exit condition |
 | --- | --- | --- |
+| 0 | Local streaming optimiser | Portable SSD calibration, one supported engine adapter, bounded candidate runs, repeated workload-matched validation and an exportable profile with rollback settings |
 | 1 | Node/capability schema and local-agent boundary | Existing single-Mac runs retain speed and correctness; every metric has node, engine, source and time identity |
 | 2 | Two-Mac inventory and link qualification | Explicitly paired peers, reliable disconnect handling, measured end-to-end latency/bandwidth and concurrent SSD tests |
 | 3 | Bounded peer RAM cache over a simple transport | One immutable expert fetched correctly; partial transfer and eviction tests pass; existing local fallback survives |
@@ -146,7 +157,7 @@ prevent reuse of an evicted buffer. Verify local fallback after peer failure.
 | 6 | Remote expert execution / broader distributed inference | Output validation, persistent-serving recovery, long generations and concurrent requests pass on two nodes before scaling |
 | 7 | Multiple clusters | Separate membership, budgets and model instances; route requests between clusters before attempting cross-cluster token synchronisation |
 
-The first prototype should use two Macs and one model. More nodes, arbitrary
+The first distributed prototype should use two Macs and one model. More nodes, arbitrary
 networks and automatic failover across separate clusters compound the difficult
 parts before the basic benefit is known. These are staged engineering milestones,
 not dates or speed promises; effort estimates depend on the engine adapter audit.
@@ -168,7 +179,9 @@ unsynchronised host clocks cannot support a trustworthy cross-host timeline.
 
 ## Immediate decision
 
-Design the next backend boundary around node/engine/expert-provider identities,
-then qualify a two-Mac peer-cache experiment. Retain the present dashboard as the
-measurement foundation. Do not promote cluster or RDMA functionality in the app
-until actual capability and end-to-end completion data are available.
+Build the local **Test drives → Tune for a model → Validate → Save settings**
+workflow first, with node/engine/expert-provider identities in its records. The
+current technical preview is the measurement portion of that product, not the
+complete optimiser. Qualify a two-Mac peer-cache experiment after the local
+workflow is useful. Add cluster and RDMA controls when actual capabilities and
+end-to-end completion data are available.

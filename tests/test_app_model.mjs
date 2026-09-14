@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compare,gain,fmt,filterRuns,flatten,settingsDiff,escapeHTML} from '../monitor/app-model.js';
+import {compare,gain,fmt,filterRuns,flatten,settingsDiff,escapeHTML,runExportOptions,runExportURL} from '../monitor/app-model.js';
 const baseline={block:'day',arm:'A',engine:'ds4',model:'GLM-Q4',prompt_hash:'abc',tokens:128,generated:128,comparison_context:['4096','1','0','nothink'],tok_s:3.26,tok_s_steady:3.6601,output_hash:'same'};
 const candidate={...baseline,arm:'B',tok_s:3.54,tok_s_steady:4.2968};
 test('matched pair has 17.4% decode gain; inclusive is distinct',()=>{
@@ -34,3 +34,28 @@ test('run filters compose and flatten retains source identity',()=>{
   assert.equal(filterRuns(rows,{query:'missing'}).length,0);
 });
 test('saved filenames and prompts are escaped for markup',()=>assert.equal(escapeHTML('<img src=x onerror="x">'), '&lt;img src=x onerror=&quot;x&quot;&gt;'));
+test('recent export options never fall back to the unfiltered CSV endpoint',()=>{
+  assert.equal(runExportURL('all'),'/stats.csv');
+  for(const [scope] of runExportOptions.filter(([scope])=>scope!=='all')){
+    const url=new URL(runExportURL(scope),'http://localhost');
+    assert.equal(url.pathname,'/runs-export.csv');
+    const [key,value]=scope.split(':');
+    assert.equal(url.searchParams.get(key),value);
+    assert.equal([...url.searchParams].length,1);
+  }
+  for(const scope of ['',undefined,'last:0','hours:1&last=20'])assert.throws(()=>runExportURL(scope));
+});
+
+test('SSD averages weight elapsed time and include sampled idle',async()=>{
+  const {readWindowStats}=await import('../monitor/app-model.js');
+  const r=readWindowStats([[10.1,10,.1],[10.4,2,.3],[10.6,0,.2]],30,10.6);
+  assert.ok(Math.abs(r.mean-1.6/.6)<1e-9);
+  assert.equal(r.peak,10);assert.ok(Math.abs(r.seconds-.6)<1e-9);assert.equal(r.reading,true);
+});
+test('SSD missing and delayed samples do not invent a peak',async()=>{
+  const {readWindowStats}=await import('../monitor/app-model.js');
+  assert.equal(readWindowStats([]).mean,null);
+  assert.equal(readWindowStats([[10,50,3]],30,10).peak,null);
+  assert.equal(readWindowStats([[1,10,.2]],30,10).reading,false);
+  assert.equal(readWindowStats([[10,10,.2]],2,14).mean,null);
+});

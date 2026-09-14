@@ -7,6 +7,12 @@ part of the shipped runtime. Users install neither of them.
 The initial release scope is one Mac: reports, comparisons, diagnostics and
 opt-in hardware collection. Cluster/RDMA functionality remains planned.
 
+This is a packaging and measurement technical preview of the broader
+expert-streaming optimiser. The next local milestone is guided SSD calibration,
+model/workload-specific configuration tests and validated profile export, before
+cluster work. It is not included in the current app; see
+[STREAMING-OPTIMIZER.md](STREAMING-OPTIMIZER.md) for its acceptance criteria.
+
 ## Build from source
 
 On an Apple-silicon build Mac with Xcode and Python 3.12:

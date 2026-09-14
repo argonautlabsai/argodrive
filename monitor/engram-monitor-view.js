@@ -1,0 +1,38 @@
+// Engram/weight attribution view. The sampler's physical counters are
+// intentionally kept separate from engine-classified counters: a device rate
+// alone cannot tell us whether bytes came from Engram rows or weight tensors.
+export function finite(v){return typeof v==='number'&&Number.isFinite(v);}
+export function fmt(v,d=2){return finite(v)?v.toLocaleString('en-GB',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';}
+export function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function stats(points=[]){
+  const rows=points.filter(p=>Array.isArray(p)&&finite(p[0])&&finite(p[1])&&p[1]>=0&&finite(p[2])&&p[2]>0);
+  const seconds=rows.reduce((n,p)=>n+p[2],0),bytes=rows.reduce((n,p)=>n+p[1]*p[2],0);
+  return {rows,mean:seconds?bytes/seconds:null,peak:rows.length?Math.max(...rows.map(p=>p[1])):null};
+}
+function classData(attr,id,kind){return attr?.devices?.[id]?.[kind]||attr?.[id]?.[kind]||[];}
+function chart(device,attr,seconds){
+  const total=stats(device.total),weights=stats(classData(attr,device.id,'weights')),engram=stats(classData(attr,device.id,'engram'));
+  const classified=weights.rows.length||engram.rows.length;
+  const rows=classified?[...weights.rows.map(p=>({...p,kind:'weights'})),...engram.rows.map(p=>({...p,kind:'engram'}))].sort((a,b)=>a[0]-b[0]):total.rows;
+  if(!rows.length)return `<div class="engram-chart-empty">No intervals recorded for this drive.</div>`;
+  const end=Math.max(...rows.map(p=>p[0])),start=end-seconds,max=Math.max(1,...rows.map(p=>p[1]))*1.12,left=30,width=610,top=10,height=130;
+  const y=v=>top+height-height*v/max;
+  const bars=classified?rows.map(p=>{const x=left+(p[0]-p[2]-start)/seconds*width,w=Math.max(.7,p[2]/seconds*width*.82),color=p.kind==='engram'?'var(--purple)':'var(--teal)';return `<rect x="${x.toFixed(2)}" y="${y(p[1]).toFixed(2)}" width="${w.toFixed(2)}" height="${(height-(y(p[1])-top)).toFixed(2)}" fill="${color}" opacity=".8"><title>${p.kind==='engram'?'Engram rows':'Weight tensors'} · ${fmt(p[1])} GB/s · ${fmt(p[2]*1000,0)} ms</title></rect>`;}).join(''):rows.map(p=>{const x=left+(p[0]-p[2]-start)/seconds*width,w=Math.max(.7,p[2]/seconds*width*.82);return `<rect x="${x.toFixed(2)}" y="${y(p[1]).toFixed(2)}" width="${w.toFixed(2)}" height="${(height-(y(p[1])-top)).toFixed(2)}" fill="var(--faint)" opacity=".55"><title>Unclassified device reads · ${fmt(p[1])} GB/s · ${fmt(p[2]*1000,0)} ms</title></rect>`;}).join('');
+  const grid=[0,.5,1].map(f=>`<line class="gridline" x1="${left}" x2="${left+width}" y1="${y(max*f)}" y2="${y(max*f)}"/><text x="${left-7}" y="${y(max*f)+4}" text-anchor="end">${fmt(max*f,0)}</text>`).join('');
+  return `<svg class="engram-plot" viewBox="0 0 680 174" role="img" aria-label="${esc(device.label||device.id)} ${classified?'Engram and weight':'unclassified'} read throughput over the last ${seconds} seconds">${grid}${bars}<text x="${left}" y="169">−${seconds}s</text><text x="${left+width/2}" y="169" text-anchor="middle">−${Math.round(seconds/2)}s</text><text x="${left+width}" y="169" text-anchor="end">latest</text></svg><div class="engram-chart-facts"><span>Device average <b>${fmt(total.mean)} GB/s</b></span><span>Device peak <b>${fmt(total.peak)} GB/s</b></span>${classified?`<span class="engram-fact-weight">Weights <b>${fmt(weights.mean)} GB/s</b></span><span class="engram-fact-engram">Engram <b>${fmt(engram.mean)} GB/s</b></span>`:'<span>Classification <b>Unavailable</b></span>'}</div>`;
+}
+export function engramMonitorView(data={},opts={}){
+  const attr=data.attribution||data.streaming_attribution||{};
+  const devices=(data.devices||[]).filter(x=>x.present!==false);
+  const seconds=Number(opts.window)||20;
+  const classified=attr.status==='available'||devices.some(d=>classData(attr,d.id,'weights').length||classData(attr,d.id,'engram').length);
+  const source=attr.source||'Physical SSD counters';
+  const status=classified?'green':'amber';
+  const total=stats(data.read_windows?.TOTAL||[]);
+  const cards=devices.map(d=>`<section class="panel engram-device-card"><div class="panel-head"><div><h2><span class="legend-dot" style="background:var(--blue)"></span>${esc(d.label||d.id)}</h2><p>${esc(d.connection||'')} · ${esc(d.device||'Not mounted')}</p></div><span class="badge">${finite(d.ceiling_gbps)?fmt(d.ceiling_gbps)+' GB/s ceiling':'Ceiling unavailable'}</span></div><div class="panel-body">${chart({...d,total:data.read_windows?.[d.id]||[]},attr,seconds)}</div></section>`).join('');
+  return `<div class="engram-status-strip"><span class="badge ${status}">${classified?'Classified engine counters':'Attribution unavailable'}</span><span>${esc(source)}</span><span>${data.health?.scope?'Live sampler':'Saved or stale samples'}</span></div>`+
+    `<div class="metrics"> <div class="metric featured"><div class="metric-label">Combined device reads</div><div class="metric-value">${fmt(total.mean)} <span class="unit">GB/s</span></div><div class="metric-note">Window average · all physical drives</div></div><div class="metric"><div class="metric-label">Window peak</div><div class="metric-value">${fmt(total.peak)} <span class="unit">GB/s</span></div><div class="metric-note">Common intervals only</div></div><div class="metric"><div class="metric-label">Engram status</div><div class="metric-value">${classified?'Ready':'Pending'}</div><div class="metric-note">Per-read class telemetry</div></div></div>`+
+    `<section class="panel engram-explanation"><div class="panel-head"><div><h2>What this view measures</h2><p>Weights and Engram use different colours when the engine supplies classified read intervals.</p></div><span class="badge ${status}">${classified?'Measured':'Needs instrumentation'}</span></div><div class="panel-body"><div class="engram-legend"><span><i class="engram-key weights"></i>Weight tensors</span><span><i class="engram-key engram"></i>Engram rows</span><span><i class="engram-key unknown"></i>Unclassified device reads</span></div>${classified?`<p>Bars are aligned to the same time axis. Averages are duration-weighted over the selected ${seconds}-second window.</p>`:`<p>macOS counters report bytes per physical device but do not identify the caller. The current ds4 integration reads Engram rows from the primary SSD, while expert weights use replica split reads. These grey bars are deliberately not labelled as weights or Engram.</p><p class="chart-note">To turn the colour overlay on, enable per-request class telemetry in the engine and record <code>device, class, interval_end, interval_seconds, gb_s</code>. No speed or allocation claim is inferred from this page.</p>`}</div></section>`+
+    (cards?`<div class="engram-device-grid">${cards}</div>`:`<section class="panel">${'<div class="panel-body"><p class="muted">No physical devices are present or no samples were recorded.</p></div>'}</section>`)+
+    `<section class="panel engram-policy"><div class="panel-head"><div><h2>Current streaming policy</h2><p>Separate the implementation status from measured throughput.</p></div></div><div class="panel-body"><div class="setting-line"><span>Weight tensors</span><strong>Replica split reads across configured drives</strong></div><div class="setting-line"><span>Engram rows</span><strong>Primary by default · bounded whole-row readers</strong></div><div class="setting-line"><span>Three-drive Engram striping</span><strong class="text-accent">Opt-in experimental row striping</strong></div><p class="chart-note">With <code>DS4_ARGODRIVE_ENGRAM_REPLICAS</code>, identical 264-byte rows are striped by row ID across the primary and verified replicas. Physical counters remain grey until per-request class telemetry is emitted.</p></div></section>`;
+}

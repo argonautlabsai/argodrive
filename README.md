@@ -7,7 +7,9 @@ then show the measured improvement in response time and generation speed.
 The current Mac technical preview provides Overview, Live monitor, Runs, Compare
 and Diagnostics, plus dedicated SSD charts, saved Streaming configurations, persistent data-source settings and light/dark themes.
 Drive tests, benchmark harnesses and expert-placement tools also exist in the
-source repository as separate research scripts. The guided test → tune → validate
+source repository as separate research scripts. The DeepSeek V4.1 placement
+workflow now parses router traces, maps routed experts to GGUF spans, and emits
+rate-aware manifests without changing model files. The guided test → tune → validate
 → save-settings workflow is the next product milestone; it is not yet integrated
 into the downloadable app. See the [streaming optimiser plan](docs/STREAMING-OPTIMIZER.md).
 
@@ -29,11 +31,14 @@ and not notarized; see [Mac beta release instructions](docs/MAC-BETA-RELEASE.md)
 |---|---|---|
 | Kimi K3 | Deltafin | Recorded-run analysis and streaming evidence |
 | GLM 5.3 | Argonaut ds4 fork | Recorded runs, candidate profiles and qualified campaign evidence |
-| DeepSeek V4.1 Flash | Current ds4 Metal | Experimental profiles, download/capacity readiness and a separate baseline CLI |
+| DeepSeek V4.1 Flash | Argodrive ds4 fork · Metal | Experimental three-drive profile and recorded qualification evidence |
 
-V4.1 inference and two-enclosure tuning are awaiting local qualification. The
-GLM fork's replica settings are not available in the fresh upstream engine.
-See [V4.1 preparation and test procedure](docs/DEEPSEEK41.md).
+The current V4.1 evidence is a single-machine qualification: 15.47 tok/s median
+over three pp512/tg512 repetitions on an M5 Max with the internal SSD plus two
+verified replicas. It is not a general speed guarantee, and the packaged app
+does not launch inference automatically. The GLM fork's replica settings are
+not available in the fresh upstream engine. See [V4.1 preparation and test
+procedure](docs/DEEPSEEK41.md).
 
 ## Product direction
 
@@ -101,6 +106,7 @@ the chart script in the benchmark package
 | `drives/` | `k3-drive-map.py`, `k3-drive-names.example.json` | which physical drive is which — model, serial, whole-disk, bus, direct port or hub — and drift against the last snapshot; run after any replug |
 | `placement/` | `k3-regen-manifests.py` | regenerate and verify placement manifests from the live directories |
 | `placement/` | `k3-stage-wider-bands.py` | widen replica bands by traffic share from a usage trace, with a manifest and rollback script per band |
+| `monitor/` / `scripts/` | `ds41_placement.py` / `ds41-placement.py` | parse DeepSeek router traces, map GGUF expert spans, generate Deltafin-style usage-weighted manifests, and qualify matched A/B records |
 | `scripts/` | `kimi-deltafin-profile.py` | print the Deltafin Kimi replica/ETA candidate and verify path filesystem identities without changing model data |
 
 ## How they were used
@@ -116,7 +122,7 @@ figures. Drive ceilings were measured with the engine idle.
 
 ## Current implementation boundary
 
-The local **0.2.0-beta.2** build adds an experimental Cluster tab with saved M1
+The local **0.2.0-beta.3** build adds an experimental Cluster tab with saved M1
 qualification evidence, plus native one-link expert transfer tools. A real
 Thunderbolt run verified 1,000 requests against a 200-record K3 sample at
 1.30 GB/s of transfer time. This is a transport result, not a decode speedup.
@@ -128,8 +134,10 @@ scripts can test reads, run configured benchmark arms and prepare expert replica
 many still assume the reference machine's paths and deltafin's `K3_*` settings.
 They need adaptation before use on another setup.
 
-The engine performs the actual expert reads and scheduling. ARGODRIVE's next
-step is to select, test and export settings through versioned engine adapters.
+The engine performs the actual expert reads and scheduling. The generated
+DeepSeek manifests are advisory until the ds4 fork explicitly consumes them;
+the current three-drive runner still uses its explicit split-reader settings.
+ARGODRIVE's next step is to select, test and export settings through versioned engine adapters.
 An integrated automatic tuner and runtime adaptation to changing load are not
 implemented yet. A standalone SSD result alone does not establish the fastest
 inference configuration.

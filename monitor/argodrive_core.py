@@ -6,9 +6,10 @@ import os
 import plistlib
 import re
 import subprocess
+from collections import deque
 from pathlib import Path
 
-VERSION = '0.2.0-beta.1'
+VERSION = '0.2.0-beta.3'
 
 
 def load_config(path=None):
@@ -43,7 +44,10 @@ def disk_info(path):
     out = subprocess.run(['diskutil', 'info', '-plist', str(path)], capture_output=True, timeout=5, check=True)
     info = plistlib.loads(out.stdout)
     # Some diskutil versions expose the physical store only in the text view.
-    if info.get('APFSContainerReference') and not info.get('APFSPhysicalStores'):
+    # A populated store list is not necessarily in the DeviceIdentifier shape.
+    # Fall back when its single store cannot be resolved, not only when absent.
+    stores = info.get('APFSPhysicalStores') or []
+    if info.get('APFSContainerReference') and len(stores) <= 1 and physical_disk(info) is None:
         text = subprocess.run(['diskutil', 'info', str(path)], capture_output=True, text=True, timeout=5, check=True).stdout
         stores = re.findall(r'APFS Physical Store:\s*(disk\d+(?:s\d+)*)', text)
         info['APFSPhysicalStores'] = [{'DeviceIdentifier': d} for d in stores]
@@ -79,13 +83,14 @@ def discover_drives(config, info_fn=disk_info, volume_paths=None):
             info = info_fn(path)
             disk = physical_disk(info)
             if not disk:
-                raise ValueError('No single physical disk resolved')
+                detail = {k: info[k] for k in ('DeviceIdentifier', 'APFSContainerReference', 'APFSPhysicalStores') if k in info}
+                raise ValueError(f'No single physical disk resolved: {detail}')
             if disk in devices:
                 continue
             # Preserve known historical roles where possible; other drives use BSD ids.
             if not key:
                 label = entry.get('label', disk)
-                key = label if label in ('Green', 'White', 'Yellow') else disk
+                key = label if label in ('Green', 'White', 'Yellow', 'Blue') else disk
             devices[disk] = key
         except (OSError, ValueError, subprocess.SubprocessError, plistlib.InvalidFileException) as exc:
             if not specified and path != '/':
@@ -98,6 +103,39 @@ def discover_drives(config, info_fn=disk_info, volume_paths=None):
                              'connection': entry.get('connection') or info.get('BusProtocol') or 'connection unknown',
                              'ceiling_gbps': entry.get('ceiling_gbps')})
     return devices, descriptions, errors
+
+
+class ReadOperations:
+    """Recent driver read time / completed operations, not cable RTT or GPU wait."""
+    def __init__(self):
+        self.previous = {}
+        self.windows = {}
+
+    def add(self, device, t, byte_count, operations, time_ns):
+        value = (t, byte_count, operations, time_ns)
+        old = self.previous.get(device)
+        self.previous[device] = value
+        ring = self.windows.setdefault(device, deque(maxlen=150))
+        if not old: return
+        dt = t-old[0]
+        delta = [value[i]-old[i] for i in range(1,4)]
+        if dt <= 0 or dt > 2 or any(x < 0 for x in delta):
+            ring.clear(); return
+        ring.append((t, dt, *delta))
+
+    def summary(self, now, seconds=5):
+        result = {}
+        for dev, ring in self.windows.items():
+            rows = [r for r in ring if now-seconds <= r[0]-r[1] and r[0] <= now]
+            if not rows or now-rows[-1][0] > 2: continue
+            elapsed = sum(r[1] for r in rows)
+            count = sum(r[3] for r in rows)
+            busy = sum(r[4] for r in rows)
+            result[dev] = {'mean_read_ms': busy/count/1e6 if count and busy else None,
+                'read_iops': count/elapsed, 'mean_read_kib': sum(r[2] for r in rows)/count/1024 if count else None,
+                'operations': count, 'seconds': elapsed, 'at': rows[-1][0],
+                'source': 'IOBlockStorageDriver completed reads'}
+        return result
 
 
 class CounterBuckets:
@@ -153,7 +191,12 @@ def engine_processes(ps_text):
             continue
         pid, rss, executable = parts
         name = os.path.basename(executable)
-        if name in ('ds4', 'deltafin'):
+        # DeepSeek benchmark binaries are commonly built as `ds4-bench` (the
+        # production/server names are `ds4` and `ds4-server`).  Treat all of
+        # them as the same engine family so the live monitor does not show an
+        # active run as idle simply because the executable has the benchmark
+        # suffix.
+        if name in ('ds4', 'ds4-bench', 'ds4-server', 'deltafin'):
             try:
                 out.append({'pid': int(pid), 'engine': name, 'rss_gib': int(rss)*1024/2**30})
             except ValueError:

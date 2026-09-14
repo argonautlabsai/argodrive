@@ -10,9 +10,36 @@ watched DURING runs, which is exactly when it perturbs them — treat anything
 measured with this open as indicative, not as a promotable number.
 """
 from __future__ import annotations
+import sys
+if '--ssd-tuner-worker' in sys.argv:
+    from ssd_tuner import worker_main as ssd_tuner_worker
+    raise SystemExit(ssd_tuner_worker(sys.argv[-1]))
+if '--test-worker' in sys.argv or '--test-drive-check' in sys.argv:
+    from test_runner import worker_main, disk_identity
+    if '--test-drive-check' in sys.argv:
+        import json
+        from pathlib import Path
+        r = json.loads(Path(sys.argv[-1]).read_text())
+        if [disk_identity(d['path']) for d in r['drives']] != r['identities']:
+            raise SystemExit('Selected drive identity drift')
+        print(json.dumps(r['identities']))
+        raise SystemExit(0)
+    raise SystemExit(worker_main(sys.argv[-1]))
+from cluster_state import cluster_snapshot
+from harness_monitor import HarnessMonitor, task_record
+from campaign_monitor import CampaignMonitor
+from spotlight import Spotlight
 import secrets
 from pathlib import Path
-import argparse, sys, atexit, collections, csv, http.server, io, json, os, re, signal, subprocess, threading, time, urllib.parse
+from datetime import datetime
+import argparse, sys, atexit, collections, csv, http.server, io, json, os, re, signal, subprocess, threading, time, urllib.parse, uuid
+from hardware_topology import TopologyInventory
+from argodrive_core import ReadOperations
+
+topology_inventory = TopologyInventory()
+read_operations = ReadOperations()
+harness_monitor = HarnessMonitor()
+campaign_monitor = CampaignMonitor()
 
 # --- diskscope child lifecycle -------------------------------------------
 # One sampler should exist per running server. Without explicit teardown the
@@ -39,15 +66,24 @@ def _reap_scopes(*_args) -> None:
     _SCOPE.clear()
 
 
-atexit.register(_reap_scopes)
+def _shutdown_children(*_args) -> None:
+    runner = globals().get('test_runner')
+    if runner is not None: runner.shutdown()
+    tuner = globals().get('ssd_tuner')
+    if tuner is not None: tuner.shutdown()
+    _reap_scopes()
+
+
+atexit.register(_shutdown_children)
 for _sig in (signal.SIGTERM, signal.SIGINT):
     try:
-        signal.signal(_sig, lambda s, f: (_reap_scopes(), os._exit(0)))
+        signal.signal(_sig, lambda s, f: (_shutdown_children(), os._exit(0)))
     except (ValueError, OSError):
         pass    # not on the main thread; atexit still covers the normal path
 
 from argodrive_core import (VERSION, load_config, discover_drives, CounterBuckets,
                             engine_processes, chunk_progress)
+from streaming_profile import streaming_profile, engine_header, arm_artifacts
 
 
 def arguments():
@@ -110,6 +146,7 @@ def _ensure_name(name: str) -> None:
     """Per-volume state for a volume that was not mounted at startup."""
     burst.setdefault(name, collections.deque(maxlen=BURST_RING))
     rates.setdefault(name, collections.deque(maxlen=1200))
+    read_windows.setdefault(name, collections.deque(maxlen=1200))
     peaks.setdefault(name, 0.0)
     _bucket.setdefault(name, [0.0, 0.0, 0])
     _jitter.setdefault(name, 0)
@@ -143,6 +180,8 @@ def _remap_check() -> bool:
         for series in rates.values():
             series.clear()
         total_rates.clear()
+        for series in read_windows.values():
+            series.clear()
         for name in peaks:
             peaks[name] = 0.0
     for name in fresh.values():
@@ -154,15 +193,18 @@ def _remap_check() -> bool:
 # (K3A by 16%), which made the "% utilised" readout show >100%.
 CAP = {d["id"]: d["ceiling_gbps"] for d in DRIVE_INFO if d["ceiling_gbps"] is not None}   # internal: 13.5 = measured 200 ms peak on the 2026-09-05 champion arms (was 11.68)
 # Network-fed pseudo-devices: the M1 Max expert tier arrives over the
-# Thunderbolt bridge (10.55.0.2), not through IOKit disk counters. Bytes
+    # Thunderbolt bridge management traffic is separate from IOKit disk counters. Bytes
 # RECEIVED on the bridge member port are the M1's contribution; capacity is
 # the measured one-cable payload ceiling (4.7 GB/s, 2026-09-04).
 NET_DEVS = {}  # Network traffic is not physical SSD traffic.
 WINDOW = 120.0  # Matches the product timeline; samples keep their actual intervals.
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CSV = os.environ.get("K3_SCOPE_CSV", f"/tmp/argodrive_scope_{PORT}_{os.getpid()}.csv")
+SCOPE_CSV_BASE = os.environ.get("K3_SCOPE_CSV", f"/tmp/argodrive_scope_{PORT}_{os.getpid()}.csv")
+CSV = SCOPE_CSV_BASE
 
 rates: dict[str, collections.deque] = {v: collections.deque(maxlen=1200) for v in DEVS.values()}
+read_windows = {v: collections.deque(maxlen=1200) for v in DEVS.values()}
+read_windows['TOTAL'] = collections.deque(maxlen=1200)
 sysv = {"cpu": 0.0, "ram": 0.0, "ram_avail": 128.0, "ram_mps": 0.0,
         "ram_engine": 0.0, "ram_system": 0.0, "swap": 0.0,
         "gpu": 0.0, "gmem": 0.0}
@@ -236,6 +278,26 @@ def _read_marker() -> dict | None:
     return m
 
 
+def _latest_ds4_engine_log():
+    """Find the newest explicit ds4-bench engine log when no K3 marker exists.
+
+    The DeepSeek reproduction runner writes ``baseline.engine.txt`` and a
+    ``run.json`` record, rather than the legacy k3-measure marker.  Previously
+    the live page consequently had no phase source and stayed IDLE while a
+    ds4-bench process was consuming the drives.
+    """
+    try:
+        root = Path(SOAK)
+        candidates = [p for p in root.glob("*/baseline.engine.txt") if p.is_file()]
+        # Also accept a directly selected benchmark folder for manual runs.
+        direct = root / "baseline.engine.txt"
+        if direct.is_file():
+            candidates.append(direct)
+        return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+    except (OSError, ValueError):
+        return None
+
+
 def phases_reader() -> None:
     """Tail the current arm's log and difference its [phases] lines.
 
@@ -250,20 +312,29 @@ def phases_reader() -> None:
             if marker and marker.get("log"):
                 newest = marker["log"] if os.path.exists(marker["log"]) else None
             else:
-                logs = glob.glob("/tmp/k3_fusion_rung_*.log")
-                newest = max(logs, key=os.path.getmtime) if logs else None
+                # DeepSeek's reproduction runner has no k3 marker. Prefer its
+                # engine log, then retain the legacy rung fallback.
+                ds4_log = _latest_ds4_engine_log()
+                if ds4_log:
+                    newest = str(ds4_log)
+                else:
+                    logs = glob.glob("/tmp/k3_fusion_rung_*.log")
+                    newest = max(logs, key=os.path.getmtime) if logs else None
             if newest != cur:
                 cur, prev, seen = newest, None, 0
                 if fh:
                     fh.close()
                 fh = open(cur, "r", errors="ignore") if cur else None
-                arm_name = (marker or {}).get("arm") or os.path.basename(cur or "")[19:-4]
+                arm_name = ((marker or {}).get("arm") or
+                            (Path(cur).parent.name if cur and cur.endswith("baseline.engine.txt")
+                             else os.path.basename(cur or "")[19:-4]))
                 with lock:
                     phases.update(arm=arm_name, chunks=0, decode_start=0.0,
                                   spine_ram_gib=None, spine_ssd_gib=None, spine_resident="",
                                   meta={k: marker.get(k) for k in
                                         ("out", "tokens", "chat", "overrides",
-                                         "start", "state", "rc")} if marker else {})
+                                         "start", "state", "rc")} if marker else
+                                      {"engine": "ds4", "state": "reading"})
                     phases["hist"].clear()
                     phases["tok_hist"].clear()
                     phases["tok10"] = 0.0
@@ -288,7 +359,19 @@ def phases_reader() -> None:
                         phases["meta"]["state"] = marker.get("state")
                         phases["meta"]["rc"] = marker.get("rc")
                     else:
-                        phases["active"] = (time.time() - os.path.getmtime(cur)) < 8 if cur else False
+                        ds4_running = any(e.get("engine") in ("ds4", "ds4-bench", "ds4-server")
+                                          for e in health.get("engines", []))
+                        if phases["meta"].get("engine") == "ds4" and ds4_running:
+                            # A long prefill can leave the engine log quiet for
+                            # longer than the file-age fallback. Process
+                            # detection is authoritative while ds4 is alive.
+                            phases["active"] = True
+                            phases["meta"]["state"] = "running"
+                            phases["meta"].setdefault("phase", "prefill")
+                        else:
+                            phases["active"] = (time.time() - os.path.getmtime(cur)) < 8 if cur else False
+                            if not phases["active"] and phases["meta"].get("engine") == "ds4":
+                                phases["meta"]["state"] = "complete"
                 time.sleep(0.5)
                 continue
             if line.startswith("[native] host="):
@@ -300,6 +383,31 @@ def phases_reader() -> None:
                         phases["spine_ram_gib"] = round(ram, 2)
                         phases["spine_ssd_gib"] = round(per_layer * (total - n), 2)
                         phases["spine_resident"] = f"{n}/{total}"
+            # ds4-bench emits monotonic phase boundaries instead of the
+            # cumulative K3 ``[phases]`` records.  The boundary itself is
+            # enough to drive the stage badge and keep the physical SSD bars
+            # visibly associated with the active run.
+            elif line.startswith("ARGODRIVE_PHASE "):
+                fields = line.split()
+                if len(fields) >= 4 and fields[1] in ("prefill", "decode"):
+                    phase, start, end = fields[1:4]
+                    try:
+                        start, end = float(start), float(end)
+                    except ValueError:
+                        start = end = None
+                    with lock:
+                        phases["active"] = True
+                        phases["meta"].update(engine="ds4", phase=phase, state="running")
+                        # A decode boundary means the engine has begun token
+                        # generation even before a response counter exists.
+                        if phase == "decode":
+                            phases["chunks"] = max(1, phases["chunks"])
+                        if start is not None and end is not None:
+                            phases["meta"]["phase_start"] = start
+                            phases["meta"]["phase_end"] = end
+            elif line.startswith("ds4: Argodrive Engram readers="):
+                with lock:
+                    phases["meta"]["engram_readers"] = line.split("=", 1)[1].strip()
             if line.startswith("[phases]"):
                 f = dict(kv.split("=", 1) for kv in line.split()[1:] if "=" in kv)
                 cu = {k: float(f[k].rstrip("s")) for k in PHASE_KEYS if k in f}
@@ -449,12 +557,11 @@ def scope_reader() -> None:
     k3-diskscope` aimed at a benchmark's sampler also matched this one, and
     the page then showed zeros with no indication the source was gone.
     """
+    global CSV
     prev: dict[str, tuple[float, int]] = {}
     while True:
-        try:
-            os.remove(CSV)
-        except OSError:
-            pass
+        # Retain earlier captures; the sampler exclusively creates a fresh file.
+        CSV = SCOPE_CSV_BASE + "." + uuid.uuid4().hex + ".csv"
         # SECOND LEAK SITE. This loop respawns the sampler whenever the csv goes
         # stale, and originally did so without retiring the previous child — so a
         # single long-lived server accumulated samplers on its own, independent of
@@ -529,6 +636,9 @@ def scope_reader() -> None:
             health["tail_stage"] = "reading"; health["tail_lines"] = 0; health["tail_skipped"] = 0
         prev.clear()
         with lock:
+            read_operations.previous.clear()
+            read_operations.windows.clear()
+        with lock:
             health["scope"] = True
         with open(CSV, "r", errors="ignore") as fh:
             fh.readline()
@@ -558,13 +668,20 @@ def scope_reader() -> None:
                 result = buckets.add(dev, t, v1)
                 with lock:
                     health['sample_at'] = time.time()
+                    if len(parts) >= 5:
+                        try:
+                            read_operations.add(name, t, v1, int(parts[3]), int(parts[4]))
+                        except ValueError:
+                            pass
                     if result:
                         rates[name].append((result['end'], result['rate']))
+                        read_windows[name].append((result['end'], result['rate'], result['seconds']))
                         # Delayed samples remain visible, but do not count as 200 ms peaks.
                         if result['seconds'] <= .35:
                             peaks[name] = max(peaks.get(name, 0), result['rate'])
                         if result['total'] is not None:
                             total_rates.append((result['end'], result['total']))
+                            read_windows['TOTAL'].append((result['end'], result['total'], result['seconds']))
                             if result['seconds'] <= .35:
                                 peaks['TOTAL'] = max(peaks['TOTAL'], result['total'])
                 if dev in prev:
@@ -763,6 +880,7 @@ def staging_status() -> dict:
 # ------------------------------------------------------------------ stats tab
 STATE_DIR = Path(OPTIONS.state_dir).expanduser() if OPTIONS.state_dir else (Path.home() / 'Library/Application Support/ARGODRIVE' if getattr(sys, 'frozen', False) else Path(ROOT))
 LOCAL_SETTINGS = STATE_DIR / 'argodrive.local.json'
+spotlight = Spotlight(STATE_DIR)
 try:
     SAVED_SETTINGS = json.loads(LOCAL_SETTINGS.read_text())
     if not isinstance(SAVED_SETTINGS, dict) or not isinstance(SAVED_SETTINGS.get('runs', ''), str):
@@ -783,7 +901,7 @@ _arm_cache: dict = {}
 def _parse_arm_cached(path: str):
     try:
         st = os.stat(path)
-        siblings = [Path(path).with_suffix(ext) for ext in ('.csv', '.sys', '.map', '.md5', '.readtrace.csv', '.hotlist', '.expert.json')]
+        siblings = [Path(path).with_suffix(ext) for ext in ('.csv', '.sys', '.map', '.md5', '.readtrace.csv', '.hotlist', '.expert.json', '.err', '.engine.txt', '.task.json', '.jsonl')]
         key = (st.st_mtime_ns, st.st_size, tuple((f.stat().st_mtime_ns, f.stat().st_size) if f.exists() else None for f in siblings))
     except OSError:
         return None
@@ -864,6 +982,10 @@ def _arm_settings(text: str) -> dict:
             if "=" in tok:
                 k, v = tok.split("=", 1)
                 s["req_" + k] = v
+    for source, prefix in (('DS4_ENV', 'req_'), ('CONFIG', 'req_config_')):
+        if m := re.search(r'^'+source+r' (.*)$', text, re.M):
+            for k,v in re.findall(r'(\w+)=(\S+)', m.group(1)):
+                s[prefix+k] = v
     if m := re.search(r"\[config\] resolved:(.*)", text):
         line = m.group(1)
         for ov_m in _RE_OVERLAY.finditer(line):
@@ -966,6 +1088,26 @@ def _parse_arm(path: str) -> dict | None:
         # not a measurement.
         if row.get("tokens") and row["generated"] < row["tokens"]:
             row["incomplete"] = True
+    elif (bm := re.search(r'^ARGODRIVE_BENCH_RESULT (.+)$', text, re.M)):
+        try:
+            j = json.loads(bm.group(1))
+            n = j['generated_tokens']
+            if type(n) is not int or n <= 0 or j['steady_tokens'] != n-1:
+                raise ValueError('Invalid engine counts')
+            rate = float(j['steady_tok_s'])
+            import math
+            if not math.isfinite(rate) or rate <= 0:
+                raise ValueError('Invalid engine timing')
+            row.update(started=j.get('started_at', row.get('started')), model=os.path.basename(j['model_path']).removesuffix('.gguf'),
+                       tokens=n, generated=n, ds4=True, tok_s_steady=rate,
+                       tok_s=None, elapsed=None, first_token_s=None,
+                       rate_source=j['rate_source'], prompt_hash=j['prompt_sha256'],
+                       comparison_context=(str(j['context']), 'raw-bench', 'greedy-non-eos', 'none'),
+                       summary={'ds4_gen_tps':j['generation_tok_s'], 'ds4_prefill_tps':j['prefill_tok_s'],
+                                'prompt_tokens':j['prompt_tokens'], 'valid':'ok', 'rc':0},
+                       publication_ready=False)
+        except (KeyError, ValueError, TypeError):
+            row['incomplete'] = True
     elif (dm := _RE_DS4_SUMMARY.search(text)):
         # ds4 harness (GLM project): one JSON summary line per arm.
         try:
@@ -1086,7 +1228,8 @@ def _parse_arm(path: str) -> dict | None:
     row.update(_parse_csv(path[:-4] + ".csv", path[:-4] + ".map"))
     # Kept under one key so the /stats JSON can drop it wholesale — the browser
     # pivot does not need ~120 settings columns per arm, but the CSV export does.
-    row['engine'] = 'ds4' if row.get('ds4') else 'deltafin' if row.get('model') == 'Kimi K3' else 'unknown'
+    row['engine'] = 'ds4' if row.get('ds4') or re.search(r'^DS4_ENV ', text, re.M) else 'deltafin' if row.get('model') == 'Kimi K3' else 'unknown'
+    row['model_identity'] = model_identity(row.get('model'), row['engine'])
     row['artifacts'] = {label: Path(path).with_suffix(ext).is_file() for label, ext in
                         (('log', '.log'), ('storage', '.csv'), ('memory', '.sys'), ('device_map', '.map'), ('output_hash', '.md5'), ('read_trace', '.readtrace.csv'), ('expert_profile', '.hotlist'))}
     row['artifacts']['expert_profile'] = any(Path(path).with_suffix(ext).is_file() for ext in ('.hotlist', '.expert.json', '.jsonl'))
@@ -1097,6 +1240,15 @@ def _parse_arm(path: str) -> dict | None:
     except OSError:
         pass
     row["set"] = _arm_settings(text)
+    profile = streaming_profile(text, engine_header(path))
+    row['streaming_method'] = profile['method']
+    row['streaming_status'] = profile['status']
+    if task := task_record(Path(path).with_suffix('')):
+        row['task'] = task
+        row['incomplete'] = task['status'] in ('running','unavailable')
+        row['engine'] = 'task'
+        for key in ('tok_s','tok_s_steady','generated','tokens','chunks','first_token_s'):
+            row[key] = None
     return row
 
 
@@ -1264,7 +1416,7 @@ def _stats_blocks() -> list:
             logs = [f for f in names if _is_arm_log(f)]
             artifacts = []
             for name in names:
-                if name.endswith(('.log', '.md5', '.sys', '.map', '.csv', '.hotlist', '.expert.json', '.jsonl')):
+                if name.endswith(('.log', '.err', '.md5', '.sys', '.map', '.csv', '.hotlist', '.expert.json', '.jsonl', '.engine.txt', '.task.json')):
                     st = os.stat(os.path.join(d, name))
                     artifacts.append((name, st.st_mtime_ns, st.st_size))
             newest = max((x[1] / 1e9 for x in artifacts), default=0)
@@ -1354,21 +1506,30 @@ _CSV_LEAD = ["block", "arm", "ran", "tokens", "generated", "incomplete", "is_bas
              "feat_mirror", "feat_retain", "feat_summer"]
 
 
-def stats_csv(frm: str = "", to: str = "", only_block: str = "") -> bytes:
+def stats_csv(frm: str = "", to: str = "", only_block: str = "", *,
+              hours: int | None = None, last_runs: int | None = None,
+              now: float | None = None) -> bytes:
     """Every arm of every block as one CSV, with the settings families attached.
 
-    Date range is INCLUSIVE on both ends and filters on the arm's own mtime
-    (`ran`), not the block directory name — block names are hand-written and
-    several do not carry a date at all, so trusting them would silently drop
-    arms. Arms with no readable mtime are kept and marked, never dropped: an
-    export that quietly omits rows is the same class of error as a truncated
-    arm reported as a measurement.
+    Date range is inclusive on both ends and uses each arm's `ran` timestamp
+    (harness completion, or file mtime), never the block name. Relative hours
+    end at the server's current time. Recent-count exports sort across blocks,
+    newest first, with block/arm as the stable tie-break. Recent exports omit
+    undated rows; all-runs and legacy date exports retain and mark them.
 
     Columns are the UNION across the selected arms, so a knob that appears in
     only one block still gets a column rather than being hidden.
     """
+    if hours is not None and (type(hours) is not int or hours not in (1, 3, 6, 24)):
+        raise ValueError('Choose 1, 3, 6 or 24 hours.')
+    if last_runs is not None and (type(last_runs) is not int or last_runs not in (1, 5, 10, 20)):
+        raise ValueError('Choose the latest 1, 5, 10 or 20 runs.')
+    if hours is not None and last_runs is not None:
+        raise ValueError('Choose a time range or a run count, not both.')
+    now = time.time() if now is None else now
     blocks = _stats_blocks()
     rows: list[dict] = []
+    recent: list[tuple] = []
     for b in blocks:
         if only_block and b["block"] != only_block:
             continue
@@ -1383,7 +1544,21 @@ def stats_csv(frm: str = "", to: str = "", only_block: str = "") -> bytes:
             if not day:
                 flat["ran"] = "(no mtime)"
             flat.update(r.get("set") or {})
+            if hours is not None or last_runs is not None:
+                try:
+                    # Naive harness timestamps are local to the Mac serving
+                    # the reports. ISO timestamps with an offset retain it.
+                    stamp = datetime.fromisoformat(r.get('ran') or '').timestamp()
+                except (ValueError, TypeError, OverflowError, OSError):
+                    continue
+                if hours is not None and not now - hours * 3600 <= stamp <= now:
+                    continue
+                recent.append((stamp, b['block'], r.get('arm', ''), flat))
+                continue
             rows.append(flat)
+    if hours is not None or last_runs is not None:
+        recent.sort(key=lambda entry: (-entry[0], entry[1], entry[2]))
+        rows = [entry[3] for entry in (recent[:last_runs] if last_runs is not None else recent)]
     if not rows:
         return b"# no arms matched the selected range\n"
 
@@ -2027,6 +2202,10 @@ def arm_detail(block: str, arm: str) -> bytes:
         except ValueError: pass
     out['settings'] = _arm_settings(text)
     out['row'] = _parse_arm_cached(path)
+    out['streaming'] = streaming_profile(text, engine_header(path))
+    out['files'] = arm_artifacts(path)
+    out['folder'] = os.path.dirname(path)
+    out['log_path'] = path
     return json.dumps(out, separators=(",", ":")).encode()
 
 
@@ -2255,7 +2434,13 @@ def list_traces() -> list:
 
 
 def _resolve_trace(name: str):
-    for base in (ROOT, SOAK, os.path.join(ROOT, "deltafin-root-local"), "/Volumes/Yellow/deltafin-root"):
+    bases = [ROOT, SOAK, os.path.join(ROOT, "deltafin-root-local")]
+    # An external trace root is opt-in so the source does not embed a
+    # reference machine's volume name or mount point.
+    external = os.environ.get("K3_EXTERNAL_TRACE_ROOT")
+    if external:
+        bases.append(external)
+    for base in bases:
         cand = os.path.join(base, name)
         if os.path.exists(cand):
             return cand
@@ -2294,12 +2479,9 @@ _procs_cache: dict = {"t": 0.0, "val": b"{}"}
 def procs_payload() -> bytes:
     """Top processes by RSS, plus the engine's own footprint broken out.
 
-    CAVEAT carried into the page: RSS does NOT include a process's GPU-wired
-    Metal allocations, so the engine's real footprint is at least rss + its MPS
-    pool. On this host the MPS pool alone runs 38-48 GiB while deltafin's RSS
-    sits far below that — reading RSS as "the engine's memory" understates it by
-    more than the whole rest of the machine. Reported as two measured
-    quantities rather than one fake total.
+    Process RSS and system Metal allocations are different, potentially
+    overlapping views. Neither their sum nor a residual against system used
+    memory establishes the engine's total footprint.
 
     Cached for 2 s: `ps -A` over ~700 processes is not free, and this page is
     meant to be open DURING runs.
@@ -2308,9 +2490,10 @@ def procs_payload() -> bytes:
     if now - _procs_cache["t"] < 2.0:
         return _procs_cache["val"]
     rows = []
+    error = None
     try:
         out = subprocess.run(["ps", "-A", "-o", "pid=,rss=,%cpu=,comm="],
-                             capture_output=True, text=True, timeout=10).stdout
+                             capture_output=True, text=True, timeout=10, check=True).stdout
         for line in out.splitlines():
             parts = line.split(None, 3)
             if len(parts) < 4:
@@ -2323,19 +2506,18 @@ def procs_payload() -> bytes:
             rows.append({"pid": pid, "gib": round(rss * 1024 / 1073741824, 2),
                          "cpu": round(pcpu, 1), "name": name,
                          "full": parts[3][-110:]})
-    except (OSError, subprocess.SubprocessError):
-        pass
+    except (OSError, subprocess.SubprocessError) as exc:
+        error = str(exc)
     rows.sort(key=lambda r: r["gib"], reverse=True)
     top = rows[:10]
     with lock:
         mps = sysv.get("ram_mps", 0.0)
         used = sysv.get("ram", 0.0)
-    eng = round(sum(r["gib"] for r in rows if "deltafin" in r["name"]), 2)
+    eng = round(sum(r["gib"] for r in rows if r['name'] in ('deltafin','ds4')), 2) if not error else None
     body = {"top": top, "count": len(rows), "engine_rss": eng,
-            "engine_mps": round(mps, 2), "ram_used": round(used, 1),
-            # Everything vm_stat counts as used that no process RSS explains:
-            # file cache, kernel, and GPU-wired pages.
-            "unattributed": round(max(0.0, used - sum(r["gib"] for r in rows) - mps), 1)}
+            "engine_mps": None, "system_metal": round(mps, 2), "ram_used": round(used, 1),
+            # The overlapping measurements cannot establish a residual.
+            "unattributed": None, "available": error is None, "error": error}
     val = json.dumps(body, separators=(",", ":")).encode()
     _procs_cache.update(t=now, val=val)
     return val
@@ -2434,7 +2616,7 @@ def live_progress():
     result['state'] = 'engine detected'
     if any(e['engine'] == 'deltafin' for e in engines) and phases['active']:
         result.update(rate=phases['tok10'] or None, source='deltafin stats', state=phases['meta'].get('state') or 'running')
-    if any(e['engine'] == 'ds4' for e in engines):
+    if any(e['engine'] in ('ds4', 'ds4-bench', 'ds4-server') for e in engines):
         import glob
         marker = _read_marker()
         paths = [os.path.splitext(marker['log'])[0]+'.chunks'] if marker and marker.get('log') else glob.glob(os.path.join(SOAK, '*', '*.chunks'))
@@ -2444,6 +2626,12 @@ def live_progress():
             prog = chunk_progress(newest)
             if prog and time.time()-prog['last_wall'] < 15:
                 result.update(prog, state='recent response telemetry', associated=bool(marker and marker.get('state') == 'running'))
+        # The bounded DeepSeek benchmark has no response-chunk sidecar. Phase
+        # markers still provide an authoritative live state while the engine
+        # process is present; do not label that interval idle.
+        if phases['active']:
+            result.update(rate=phases['tok10'] or None, source='ds4 phase markers',
+                          state=phases['meta'].get('phase', 'running'))
     return result
 
 
@@ -2472,6 +2660,14 @@ def payload() -> bytes:
                 "active": round(sum(act) / len(act), 2) if act else 0.0,
             }
         body = dict(traces=tr, total=total, cap=CAP, peaks=dict(peaks),
+                    # Physical counters are device-wide. Until the engine's
+                    # per-request class telemetry is enabled, the Engram
+                    # monitor must show this explicitly rather than inventing
+                    # a weights/Engram split.
+                    streaming_attribution={
+                        'status': 'unavailable',
+                        'source': 'Physical SSD counters (device-wide)',
+                        'note': 'The sampler cannot identify whether a read served a weight tensor or an Engram row.'},
                     cur=cur, cur_total=round(total_now, 2) if total_now is not None else None, sys=dict(sysv),
                     health=dict(health), memhist=mh, ram_total=RAM_TOTAL,
                     dist={}, staging={}, duty=duty,
@@ -2493,6 +2689,8 @@ def payload() -> bytes:
                             "hist": [[t, d] for t, d in phases["hist"]][-240:],
                             "decode_start": phases["decode_start"],
                             "gb_tok": None})  # Needs bytes and tokens over the same interval.
+        body['read_windows'] = {k:list(v) for k,v in read_windows.items()}
+        body['read_operations'] = read_operations.summary(time.time()) if fresh else {}
         # Burst view: last 10 s, max-in-bucket to <=250 buckets per device —
         # peaks must survive decimation (mean-in-bucket is the exact mistake
         # the 10 ms spec exists to correct). Raw ticks ship when zoomed.
@@ -2527,10 +2725,19 @@ def payload() -> bytes:
     body['sample_ms'] = OPTIONS.sample_ms
     body['health']['scope'] = bool(body['health']['scope'] and fresh)
     body['health']['sample_age_s'] = round(time.time()-health['sample_at'], 1) if health.get('sample_at') else None
-    body['cap_total'] = sum(CAP[k] for k in present) if present and all(k in CAP for k in present) else None
+    body['individual_ceiling_sum'] = sum(CAP[k] for k in present) if present and all(k in CAP for k in present) else None
+    # Per-drive calibrations do not establish simultaneous throughput. In
+    # particular, two downstream SSDs can share the same hub uplink. Keep the
+    # aggregate uncalibrated until a common-window calibration is recorded.
+    body['cap_total'] = CAP.get(present[0]) if len(present) == 1 else None
+    body['cap_total_note'] = 'A simultaneous multi-drive calibration is required; individual ceilings are not additive.' if len(present)>1 else 'Single physical drive, where configured.'
     body['runs_path'] = SOAK
     body['source_path'] = ROOT
     body['discovery_errors'] = DISCOVERY_ERRORS
+    # Startup Spotlight policy check is read-only. Include the latest snapshot
+    # in the common payload so every screen can warn before a benchmark, not
+    # only the SSD settings page.
+    body['spotlight'] = spotlight.snapshot()
     body['live_progress'] = live_progress()
     body['system_fresh'] = bool(health.get('system_at') and time.time()-health['system_at'] < 5)
     return json.dumps(body, separators=(",", ":")).encode()
@@ -2609,10 +2816,20 @@ def source_info(path):
     return {'runs': str(folder), 'logs': count, 'blocks': len(blocks)}
 
 
+from test_runner import TestRunner, atomic
+TEST_COMMAND = ([sys.executable] if getattr(sys, 'frozen', False) else [sys.executable, str(Path(__file__).resolve())]) + ['--test-worker']
+test_runner = TestRunner(STATE_DIR, TEST_COMMAND, inventory=lambda: DRIVE_INFO)
+from ssd_tuner import SSDTuner
+ssd_tuner = SSDTuner(STATE_DIR, TEST_COMMAND[:-1] + ['--ssd-tuner-worker'])
+
+from engine_profiles import draft_shape
+from model_support import model_catalog, model_identity, readiness as model_readiness
+
+
 def settings_payload():
     return {'runs': SOAK, 'exists': os.path.isdir(SOAK), 'mode': 'reports' if OPTIONS.reports_only else 'live',
             'sample_ms': OPTIONS.sample_ms, 'token': SETTINGS_TOKEN, 'version': VERSION,
-            'persisted_runs': SAVED_SETTINGS.get('runs'), 'cli_override': bool(OPTIONS.runs or CONFIG.get('runs'))}
+            'engine_draft': SAVED_SETTINGS.get('engine_draft'), 'persisted_runs': SAVED_SETTINGS.get('runs'), 'cli_override': bool(OPTIONS.runs or CONFIG.get('runs'))}
 
 
 def apply_source(path, validate_only=False):
@@ -2621,9 +2838,7 @@ def apply_source(path, validate_only=False):
     if not validate_only:
         saved = {**SAVED_SETTINGS, 'runs': info['runs']}
         LOCAL_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
-        temporary = LOCAL_SETTINGS.with_suffix('.json.tmp')
-        temporary.write_text(json.dumps(saved, indent=2) + '\n')
-        temporary.replace(LOCAL_SETTINGS)
+        atomic(LOCAL_SETTINGS, saved)
         SOAK = info['runs']
         SAVED_SETTINGS = saved
         _stats_cache.update(key=None, val=None)
@@ -2631,6 +2846,16 @@ def apply_source(path, validate_only=False):
         _BYLAYER_CACHE.clear()
         _experts_cache.update(key=None, val=b'{}')
     return {**info, 'applied': not validate_only}
+
+
+def save_engine_draft(value):
+    global SAVED_SETTINGS
+    draft = draft_shape(value)
+    saved = {**SAVED_SETTINGS, 'engine_draft': draft}
+    LOCAL_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+    atomic(LOCAL_SETTINGS, saved)
+    SAVED_SETTINGS = saved
+    return {'saved': True, 'engine_draft': draft, 'applied_to_engine': False}
 
 
 class H(http.server.BaseHTTPRequestHandler):
@@ -2651,18 +2876,40 @@ class H(http.server.BaseHTTPRequestHandler):
         if not self.local_host(): return
         expected = 'http://' + self.headers.get('Host', '')
         if self.headers.get('Origin') != expected or self.headers.get('X-Argodrive-Token') != SETTINGS_TOKEN:
-            self.send_error(403, 'Open Settings in ARGODRIVE to change the data source.')
+            self.send_error(403, 'Use the local ARGODRIVE interface to change settings.')
             return
-        if self.path != '/settings':
+        if self.path not in ('/settings', '/spotlight', '/spotlight/scan', '/models/preflight', '/test-runner/start', '/test-runner/stop', '/ssd-tuner/start', '/ssd-tuner/stop'):
             self.send_error(404)
             return
         try:
             size = int(self.headers.get('Content-Length', '0'))
             if not 0 < size <= 8192: raise ValueError('Invalid settings request size')
             body = json.loads(self.rfile.read(size))
-            if not isinstance(body, dict) or not isinstance(body.get('runs'), str): raise ValueError('A folder path is required')
-            with SOURCE_LOCK:
-                result = apply_source(body['runs'], body.get('validate_only') is True)
+            if not isinstance(body, dict): raise ValueError('A JSON object is required')
+            if self.path == '/ssd-tuner/start':
+                result = ssd_tuner.start(body)
+            elif self.path == '/ssd-tuner/stop':
+                if set(body) != {'id'}: raise ValueError('Specify the owned calibration ID.')
+                result = ssd_tuner.stop(body['id'])
+            elif self.path == '/test-runner/start':
+                result = test_runner.start(body, SOAK)
+            elif self.path == '/test-runner/stop':
+                if set(body) != {'id'}: raise ValueError('Specify the owned test ID.')
+                result = test_runner.stop(body['id'])
+            elif self.path == '/models/preflight':
+                result = model_readiness(body)
+            elif self.path == '/spotlight/scan':
+                result = spotlight.scan()
+            elif self.path == '/spotlight':
+                result = spotlight.change(body.get('id'), body.get('enabled'))
+            elif 'engine_draft' in body:
+                if set(body) != {'engine_draft'}: raise ValueError('Save the engine draft separately from other settings')
+                with SOURCE_LOCK:
+                    result = save_engine_draft(body['engine_draft'])
+            else:
+                if not isinstance(body.get('runs'), str): raise ValueError('A folder path is required')
+                with SOURCE_LOCK:
+                    result = apply_source(body['runs'], body.get('validate_only') is True)
             status = 200
         except (ValueError, OSError) as exc:
             result, status = {'error': str(exc)}, 400
@@ -2676,16 +2923,67 @@ class H(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.local_host(): return
+        # Inventory can take seconds. It must not block live /data responses.
+        if urllib.parse.urlparse(self.path).path == '/topology':
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            b = json.dumps(topology_inventory.snapshot(list(DRIVE_INFO), OPTIONS.reports_only,
+                           force=(q.get('refresh') == ['1']), config=CONFIG)).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+            return
         # Trace parsers retain a one-file cache. Serialize report/source operations.
         with SOURCE_LOCK:
             self.get_response()
 
     def get_response(self):
         p = urllib.parse.urlparse(self.path).path
-        if p in ('/app.css', '/app.js', '/app-model.js'):
+        if p in ('/app.css', '/app.js', '/app-model.js', '/topology-view.js', '/cluster-view.js', '/spotlight-view.js', '/engine-settings.js', '/campaign-view.js', '/model-support.js', '/ssd-tuner-view.js', '/benchmark-view.js', '/engram-monitor-view.js'):
             b = Path(ROOT, p[1:]).read_bytes()
             self.send_response(200)
             self.send_header('Content-Type', 'text/css' if p.endswith('.css') else 'text/javascript')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/ssd-tuner':
+            b = json.dumps(ssd_tuner.status(), allow_nan=False).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/spotlight':
+            b = json.dumps(spotlight.snapshot()).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/test-runner':
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            test_payload = {'run': test_runner.status()}
+            if query.get('options') == ['1']: test_payload['options'] = test_runner.options()
+            b = json.dumps(test_payload, allow_nan=False).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/models':
+            b = json.dumps(model_catalog()).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/campaigns':
+            b = json.dumps(campaign_monitor.snapshot(SOAK), allow_nan=False).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/harness':
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            b = json.dumps(harness_monitor.snapshot(SOAK, (query.get('arm') or [''])[0]), allow_nan=False).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+        elif p == '/cluster':
+            b = json.dumps(cluster_snapshot(STATE_DIR, ROOT)).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
             self.send_header('Cache-Control', 'no-store')
         elif p == '/settings':
             b = json.dumps(settings_payload()).encode()
@@ -2772,16 +3070,32 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
-        elif p == "/stats.csv":
-            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        elif p in ("/stats.csv", "/runs-export.csv"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query, keep_blank_values=True)
             frm = (q.get("from") or [""])[0]
             to = (q.get("to") or [""])[0]
             blk = (q.get("block") or [""])[0]
-            b = stats_csv(frm, to, blk)
+            if p == '/runs-export.csv':
+                # Separate endpoint: an older running backend must refuse a
+                # recent export, never silently download its entire library.
+                try:
+                    if set(q) - {'hours', 'last'} or len(q) != 1 or any(len(v) != 1 for v in q.values()):
+                        raise ValueError('Choose one export range.')
+                    hours = int(q['hours'][0]) if 'hours' in q else None
+                    last_runs = int(q['last'][0]) if 'last' in q else None
+                    now = time.time()
+                    b = stats_csv(hours=hours, last_runs=last_runs, now=now)
+                except ValueError as exc:
+                    self.send_error(400, str(exc))
+                    return
+                scope = f'last-{hours}-hours' if hours is not None else f'last-{last_runs}-runs'
+                span = scope + time.strftime('_exported-%Y-%m-%d_%H-%M-%S', time.localtime(now))
+            else:
+                b = stats_csv(frm, to, blk)
+                span = f"{frm or 'all'}_to_{to or 'all'}" + (f"_{blk}" if blk else "")
             # The range goes in the FILENAME, not just the query string. A folder
             # of k3-arms.csv files with no way to tell which range each covers is
             # how two exports get compared as if they were the same population.
-            span = f"{frm or 'all'}_to_{to or 'all'}" + (f"_{blk}" if blk else "")
             self.send_response(200)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
             self.send_header("Content-Disposition",
@@ -2829,7 +3143,7 @@ def watch_parent(pid):
     while True:
         time.sleep(1)
         if os.getppid() != pid:
-            _reap_scopes()
+            _shutdown_children()
             os._exit(0)
 
 
@@ -2856,15 +3170,21 @@ if __name__ == "__main__":
     if OPTIONS.ready_file:
         ready = Path(OPTIONS.ready_file)
         ready.parent.mkdir(parents=True, exist_ok=True)
-        ready.write_text(json.dumps({'port': PORT, 'pid': os.getpid(), 'version': VERSION}))
+        with ready.open('x') as marker:
+            marker.write(json.dumps({'port': PORT, 'pid': os.getpid(), 'version': VERSION}))
     if not OPTIONS.reports_only:
         if DEVS:
             threading.Thread(target=scope_reader, daemon=True).start()
         threading.Thread(target=sys_reader, daemon=True).start()
         threading.Thread(target=phases_reader, daemon=True).start()
+    # Check indexing policy once for every Live Hardware start. This does not
+    # change Spotlight and runs in the background so the live page opens fast.
+    # Reports Only remains fully passive: no hardware or policy probes.
+    if not OPTIONS.reports_only:
+        threading.Thread(target=spotlight.scan, name='spotlight-startup-check', daemon=True).start()
     print(f"ARGODRIVE {VERSION} -> http://localhost:{PORT} ({'reports only' if OPTIONS.reports_only else 'live'}; Ctrl-C stops)", flush=True)
     try:
         server.serve_forever()
     finally:
         server.server_close()
-        _reap_scopes()
+        _shutdown_children()

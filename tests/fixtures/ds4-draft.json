@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "engine": "ds4",
+  "backend": "metal",
+  "build": "standard",
+  "buildId": "",
+  "modelFamily": "other",
+  "objective": "decode",
+  "threads": "",
+  "readAhead": "default",
+  "cache": "",
+  "decodeCachePct": "",
+  "cold": false,
+  "method": "single",
+  "nocache": "default",
+  "lru": "default",
+  "prefetch": "",
+  "prefill": "default",
+  "sources": [
+    {
+      "path": "",
+      "weight": "1",
+      "pieces": "1",
+      "inflight": "0"
+    }
+  ]
+}

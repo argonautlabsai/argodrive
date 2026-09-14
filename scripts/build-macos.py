@@ -14,7 +14,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / '.build'
 DIST = ROOT / 'dist'
-VERSION = '0.2.0-beta.1'
+VERSION = '0.2.0-beta.3'
 
 
 def run(args, **kwargs):
@@ -46,12 +46,22 @@ def main():
     freeze = [args.python,'-m','PyInstaller','--noconfirm','--clean','--onedir','--name','argodrive-server',
               '--target-arch','arm64','--distpath',BUILD/'frozen','--workpath',BUILD/'freeze-work','--specpath',BUILD,
               '--paths',ROOT/'monitor','--add-binary',str(BUILD/'k3-diskscope')+':.', '--log-level','WARN']
-    for name in ['k3-live-page.html','app.css','app.js','app-model.js']:
+    for name in ['k3-live-page.html','app.css','app.js','app-model.js','topology-view.js','cluster-view.js','spotlight-view.js','engine-settings.js','campaign-view.js','model-support.js','ssd-tuner-view.js','benchmark-view.js','engram-monitor-view.js','cluster-evidence.json']:
         freeze += ['--add-data',str(ROOT/'monitor'/name)+':.']
+    # The Monitor test dialog can launch the verified DeepSeek V4.1 profile in
+    # addition to the legacy GLM harness.  It is imported lazily by the worker,
+    # so keep it in frozen builds explicitly.
+    freeze += ['--hidden-import', 'ds41_benchmark']
     if args.sign: freeze += ['--codesign-identity',args.sign]
     freeze += [ROOT/'monitor/k3-live.py']
     run(freeze, env={**os.environ,'PYINSTALLER_CONFIG_DIR':str(BUILD/'pyinstaller-cache')})
     shutil.copytree(BUILD/'frozen/argodrive-server',resources/'backend',symlinks=True)
+    wire_resources=resources/'wire';wire_resources.mkdir()
+    native_flags=['-std=c11','-O2','-Wall','-Wextra','-Werror','-pthread','-arch','arm64','-mmacosx-version-min=14.0']
+    run(['xcrun','clang',*native_flags,ROOT/'wire/node/argodrive-node.c','-o',wire_resources/'argodrive-node'])
+    run(['xcrun','clang',*native_flags,'-dynamiclib',ROOT/'wire/host/wire_client.c','-o',wire_resources/'libargodrive-wire.dylib'])
+    for name in ['README.md','PROTOCOL.md','BENCH.md']:
+        shutil.copy2(ROOT/'wire'/name,wire_resources/name)
     shutil.copy2(ROOT/'macos/Info.plist',app/'Contents/Info.plist')
     run(['xcrun','swiftc','-swift-version','5','-module-cache-path',BUILD/'swift-cache-xcode',ROOT/'macos/MakeIcon.swift','-o',BUILD/'make-icon'])
     run([BUILD/'make-icon',BUILD/'AppIcon.iconset'])
@@ -78,6 +88,8 @@ def main():
     # PyInstaller signs its Python libraries. Sign the native executable and outer bundle last.
     sign = ['codesign','--force','--sign',identity]
     if args.sign: sign += ['--options','runtime','--timestamp']
+    run(sign+[wire_resources/'argodrive-node'])
+    run(sign+[wire_resources/'libargodrive-wire.dylib'])
     run(sign+[macos/'ARGODRIVE'])
     run(sign+[app])
     run(['codesign','--verify','--deep','--strict','--verbose=2',app])

@@ -1,0 +1,264 @@
+{
+  "date": "2026-09-14",
+  "hardware": "Apple M5 Max, 128 GiB",
+  "model": "DeepSeek V4.1 Flash Q4",
+  "prompt": "ds4 upstream promessi_sposi.txt (exact file retained locally)",
+  "prompt_tokens": 2048,
+  "generated_tokens": 128,
+  "sampling": "ds4-bench defaults / greedy benchmark mode",
+  "context_allocation": 4096,
+  "layouts": {
+    "internal": {
+      "n": 3,
+      "prefill_median": 67.87,
+      "generation_median": 10.57,
+      "steady_median": 11.3,
+      "steady_range": [
+        10.74,
+        12.08
+      ],
+      "output_sha256": [
+        "9c91f33bc55c5494d97c6237c8fe793a34085d6d28f9d7ead963cdb784b8bc13"
+      ],
+      "app_bytes_by_source": [
+        null,
+        null,
+        null
+      ],
+      "sampler_avg_gb_s": [
+        {
+          "disk0": {
+            "avg_gb_s": 8.103,
+            "bytes": 365443772416,
+            "window_s": 45.099
+          },
+          "disk4": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 45.099
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 45.099
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 8.08,
+            "bytes": 355537068032,
+            "window_s": 44.0
+          },
+          "disk4": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 44.0
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 44.0
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 7.947,
+            "bytes": 356825559040,
+            "window_s": 44.898
+          },
+          "disk4": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 44.898
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 44.898
+          }
+        }
+      ]
+    },
+    "plus1": {
+      "n": 3,
+      "prefill_median": 66.72,
+      "generation_median": 10.34,
+      "steady_median": 11.08,
+      "steady_range": [
+        9.51,
+        11.19
+      ],
+      "output_sha256": [
+        "9c91f33bc55c5494d97c6237c8fe793a34085d6d28f9d7ead963cdb784b8bc13"
+      ],
+      "app_bytes_by_source": [
+        {
+          "0": 37155618816,
+          "1": 17169383424
+        },
+        {
+          "0": 37155618816,
+          "1": 17169383424
+        },
+        {
+          "0": 37155618816,
+          "1": 17169383424
+        }
+      ],
+      "sampler_avg_gb_s": [
+        {
+          "disk0": {
+            "avg_gb_s": 7.293,
+            "bytes": 342043123712,
+            "window_s": 46.899
+          },
+          "disk4": {
+            "avg_gb_s": 0.366,
+            "bytes": 17169383424,
+            "window_s": 46.899
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 46.899
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 7.477,
+            "bytes": 341697781760,
+            "window_s": 45.699
+          },
+          "disk4": {
+            "avg_gb_s": 0.376,
+            "bytes": 17169383424,
+            "window_s": 45.699
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 45.699
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 7.607,
+            "bytes": 341568008192,
+            "window_s": 44.899
+          },
+          "disk4": {
+            "avg_gb_s": 0.382,
+            "bytes": 17169383424,
+            "window_s": 44.899
+          },
+          "disk5": {
+            "avg_gb_s": 0.0,
+            "bytes": 0,
+            "window_s": 44.899
+          }
+        }
+      ]
+    },
+    "plus2": {
+      "n": 3,
+      "prefill_median": 66.61,
+      "generation_median": 11.8,
+      "steady_median": 12.73,
+      "steady_range": [
+        9.7,
+        13.16
+      ],
+      "output_sha256": [
+        "9c91f33bc55c5494d97c6237c8fe793a34085d6d28f9d7ead963cdb784b8bc13"
+      ],
+      "app_bytes_by_source": [
+        {
+          "0": 28570927104,
+          "1": 12877037568,
+          "2": 12877037568
+        },
+        {
+          "0": 28570927104,
+          "1": 12877037568,
+          "2": 12877037568
+        },
+        {
+          "0": 28570927104,
+          "1": 12877037568,
+          "2": 12877037568
+        }
+      ],
+      "sampler_avg_gb_s": [
+        {
+          "disk0": {
+            "avg_gb_s": 7.521,
+            "bytes": 335420841984,
+            "window_s": 44.599
+          },
+          "disk4": {
+            "avg_gb_s": 0.289,
+            "bytes": 12877037568,
+            "window_s": 44.599
+          },
+          "disk5": {
+            "avg_gb_s": 0.289,
+            "bytes": 12877037568,
+            "window_s": 44.599
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 7.059,
+            "bytes": 333874765824,
+            "window_s": 47.3
+          },
+          "disk4": {
+            "avg_gb_s": 0.272,
+            "bytes": 12877037568,
+            "window_s": 47.3
+          },
+          "disk5": {
+            "avg_gb_s": 0.272,
+            "bytes": 12877037568,
+            "window_s": 47.3
+          }
+        },
+        {
+          "disk0": {
+            "avg_gb_s": 7.645,
+            "bytes": 333323739136,
+            "window_s": 43.599
+          },
+          "disk4": {
+            "avg_gb_s": 0.295,
+            "bytes": 12877037568,
+            "window_s": 43.599
+          },
+          "disk5": {
+            "avg_gb_s": 0.295,
+            "bytes": 12877037568,
+            "window_s": 43.599
+          }
+        }
+      ]
+    }
+  },
+  "upstream_same_shape_control": {
+    "n": 2,
+    "prefill_median": 66.93,
+    "generation_median": 8.78,
+    "steady_median": 9.3,
+    "steady_range": [
+      9.26,
+      9.35
+    ],
+    "output_sha256": [
+      "0809f8c4e2c910aefe3ebf017ed4af35185095ba3af7ad41d58f6c7c9b81cd42"
+    ]
+  },
+  "fork_engine_sha256": "b66ca8f61f0b1a4854ce9881a5aebe384350f0af76a71db727343f9526f7a675",
+  "upstream_engine_sha256": "03643de1d44909e4cf4bf37aa9bba29b535c08b15c9c57c03e0908295d11f0ff",
+  "model_sha256": "a5e2e2c3ada4b2e98d9f9e4b50f6d9c2a12c2c96f5da165c07e13aff9264984e",
+  "output_parity": "Argodrive storage layouts are identical; upstream control output differs from fork output.",
+  "publication_status": "experimental engineering qualification; not a cross-build record"
+}

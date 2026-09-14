@@ -7,3 +7,12 @@ monitor/k3-live-marker.json
 .build/
 dist/
 *.local.json.tmp
+
+# Local campaign evidence and operator handoffs. Keep public summaries under docs/.
+wire/results/
+wire/**/__pycache__/
+monitor/cluster-evidence.json
+experiments/
+docs/GLM-AUTONOMY-LIVE-*.md
+docs/HARNESS-MONITOR.md
+docs/SESSION-HANDOFF-*.md

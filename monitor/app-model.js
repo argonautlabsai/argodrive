@@ -28,6 +28,55 @@ export function settingsDiff(a={},b={}) {
 export function filterRuns(rows,{query='',engine='',tokens='',status=''}={}) {
   return rows.filter(r => (!query || [r.arm,r.block,r.model,r.prompt].join(' ').toLowerCase().includes(query.toLowerCase())) && (!engine || r.engine===engine) && (!tokens || String(length(r))===tokens) && (!status || (status==='complete')===!r.incomplete));
 }
+export const runExportOptions = [
+  ['all','All runs'],
+  ['hours:1','Last 1 hour'],['hours:3','Last 3 hours'],['hours:6','Last 6 hours'],['hours:24','Last 24 hours'],
+  ['last:1','Latest 1 run'],['last:5','Latest 5 runs'],['last:10','Latest 10 runs'],['last:20','Latest 20 runs']
+];
+export function runExportURL(scope) {
+  if (!runExportOptions.some(([value])=>value===scope)) throw Error('Choose an export range.');
+  if (scope==='all') return '/stats.csv';
+  const [key,value]=scope.split(':');
+  return `/runs-export.csv?${key}=${value}`;
+}
 export function chartPath(points,width,height,minX,maxX,maxY) {
   return points.filter(p => finite(p[0]) && finite(p[1])).map((p,i) => `${i?'L':'M'}${((p[0]-minX)/(maxX-minX||1)*width).toFixed(2)},${(height-p[1]/(maxY||1)*height).toFixed(2)}`).join(' ');
+}
+
+// One axis for every live drive card. The 16 GB/s floor prevents idle drives
+// looking saturated; larger observations expand every card together.
+export function sharedReadBarScale(devices=[],traces={},caps={}) {
+  const points=devices.flatMap(d=>(traces[d.id]||[]).filter(p=>finite(p[0])&&finite(p[1])&&p[1]>=0));
+  const end=Math.max(0,...points.map(p=>p[0]));
+  const rates=points.filter(p=>p[0]>=end-120).map(p=>p[1]);
+  const max=Math.max(0,...rates,...devices.map(d=>finite(caps[d.id])?caps[d.id]:0));
+  return {end,ceiling:Math.max(16,Math.ceil(max*1.05/4)*4)};
+}
+
+// The Monitor per-drive cards use one fixed comparison domain. Aggregate
+// charts retain their own scale because they represent multiple drives.
+export const MONITOR_READ_SCALE_GBPS = 16;
+export function monitorReadBarScale(devices=[],traces={},seconds=20,end=null) {
+  const points=devices.flatMap(d=>traces[d.id]||[]);
+  const last=finite(end)?end:Math.max(0,...points.filter(p=>finite(p[0])).map(p=>p[0]));
+  return {end:last,ceiling:MONITOR_READ_SCALE_GBPS,mode:'shared'};
+}
+
+export function readWindowStats(points=[],seconds=120,end=null) {
+  const valid=points.filter(p=>finite(p[0])&&finite(p[1])&&p[1]>=0&&finite(p[2])&&p[2]>0);
+  end=finite(end)?end:valid.length?Math.max(...valid.map(p=>p[0])):null;
+  const rows=valid.filter(p=>p[0]<=end&&p[0]-p[2]>=end-seconds);
+  const duration=rows.reduce((n,p)=>n+p[2],0),bytes=rows.reduce((n,p)=>n+p[1]*p[2],0);
+  const peaks=rows.filter(p=>p[2]<=.35);
+  return {mean:duration?bytes/duration:null,peak:peaks.length?Math.max(...peaks.map(p=>p[1])):null,
+          seconds:duration,points:rows,end,reading:rows.some(p=>p[0]>=end-3&&p[1]>.001)};
+}
+
+// Display scaling only: use the visible read intervals, never a drive's advertised ceiling.
+export function readAutoScale(devices=[],traces={},seconds=20,end=null,mode='shared') {
+  const points=devices.flatMap(d=>traces[d.id]||[]);
+  const last=finite(end)?end:Math.max(0,...points.filter(p=>finite(p[0])).map(p=>p[0]));
+  const visible=readWindowStats(points,seconds,last).points;
+  const peak=Math.max(0,...visible.map(p=>p[1]));
+  return {end:last,ceiling:Math.max(2,Math.ceil(peak*1.15/2)*2),mode};
 }

@@ -11,7 +11,7 @@
  * usage: k3-diskscope <interval_ms> <seconds> <out.csv> <bsdname> [bsdname...]
  *   e.g. k3-diskscope 5 130 /tmp/scope.csv disk0 disk5 disk7
  * CSV: t_s,dev,v1,v2,v3 — row meaning by dev:
- *   diskN: v1=bytes_read (cum), v2=ops_read (cum), v3=0
+ *   diskN: v1=bytes_read (cum), v2=ops_read (cum), v3=read_time_ns (cum)
  *   ram:   v1=free_bytes, v2=wired_bytes, v3=compressed_bytes (instant)
  *   cpu:   v1=user_ticks, v2=system_ticks, v3=idle_ticks (cum, all cores)
  *   gpu:   v1=device_util_pct, v2=renderer_util_pct, v3=0 (instant; -1 if
@@ -27,6 +27,7 @@
 #include <mach/mach.h>
 #include <mach/mach_host.h>
 #include <stdio.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -214,8 +215,11 @@ int main(int argc, char **argv) {
 
     io_registry_entry_t gpu = find_accelerator();
 
-    FILE *out = fopen(out_path, "w");
-    if (!out) { perror(out_path); return 1; }
+    /* Never truncate an existing file or follow an output symlink. */
+    int out_fd = open(out_path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (out_fd < 0) { perror(out_path); return 1; }
+    FILE *out = fdopen(out_fd, "w");
+    if (!out) { perror(out_path); close(out_fd); return 1; }
     fprintf(out, "t_s,dev,v1,v2,v3\n");
 
     /* 10 ms burst mode (K3-MONITOR-10MS-UPGRADE-SPEC): the sampler must

@@ -1,8 +1,14 @@
-# ARGODRIVE 0.2.0 Beta 1 — technical preview
+# ARGODRIVE 0.2.0 Beta 3 — technical preview
 
 This is an early single-Mac monitoring and saved-run analysis app for Apple
 silicon. Python and the hardware sampler are included. Testers do not need Xcode,
 Homebrew, Node or a separate Python installation.
+
+ARGODRIVE's next product milestone is guided SSD testing and model-specific
+expert-streaming optimisation. This package tests its measurement interface;
+it does not yet run drive benchmarks, search engine settings or apply a profile.
+Drive tests and configuration experiments currently use separate research
+tools; the guided workflow remains to be built.
 
 The build targets macOS 14 or later on Apple silicon. Only the development Mac
 has been used for build checks; clean-install testing on other Macs is required.
@@ -22,15 +28,17 @@ quarantine automatically. See [Apple's opening-apps guidance](https://support.ap
 ## Install and try it
 
 1. Download and unzip the technical preview. Move `ARGODRIVE.app` to Applications.
-2. Open the app. It starts in **Reports only** mode; no inference or sampler starts.
+2. Open the app. It starts in **Live Hardware** mode and immediately shows the
+   connected drives, memory, and engine activity. Choose **Monitor → Reports
+   Only — Stop Collection** when you only want to review saved reports.
 3. Choose **File → Choose Run Folder**, or use **Settings → Choose folder**.
 4. Select the parent containing experiment folders. Supported data currently comes
    from ds4/deltafin measurement harnesses; ordinary arbitrary engine logs may not
    contain the required summary fields.
 5. Open Runs, inspect a result, select two comparable runs and check Compare.
 6. Export a CSV or comparison and verify that the native Save dialog works.
-7. Optionally choose **Monitor → Live Hardware** to start local hardware collection.
-   **Monitor → Reports Only** stops it. Closing the last window quits the app and
+7. Choose **Monitor → Live Hardware** to restart collection after Reports Only.
+   Closing the last window quits the app and
    stops the backend and its sampler. No inference engine is started or stopped.
 
 Example folder layout:
@@ -72,3 +80,24 @@ Settings and the two most recent backend logs live in:
   sampler. Use the native app's mode menu or quit its app instance.
 - The app currently supports one local workspace. No automatic updates, cloud
   service, model download or cluster management is included.
+# Beta 2 Cluster preview
+
+This local build adds saved Cluster evidence and experimental native one-link
+transfer tools. Open Cluster, check the recorded-session label, refresh the
+evidence and export the JSON. It does not start a remote daemon or change model
+placement. The bundled measurements are from the development M1/M5 test rig.
+Refer to `wire/BENCH.md` for the real 1,000-transfer check and unqualified gates.
+This build is ad-hoc signed and not notarized; it has not been published to GitHub.
+
+## Beta 3 model readiness and detailed Live charts
+
+Streaming → Models & readiness distinguishes Kimi K3 on Deltafin, GLM 5.3 on
+the Argonaut ds4 fork, and experimental DeepSeek V4.1 Flash on current ds4.
+The V4.1 form checks the assembled file size/header and optional enclosure
+capacity without starting inference. A successful metadata check does not mean
+checksum verification or performance qualification. V4.1 replica streaming is
+not implemented in this build. See [DeepSeek preparation](DEEPSEEK41.md).
+
+Live drive charts are stacked full width, with a shared scale, a 10/20/60-second
+window, time-weighted average and window peak. Peaks use the actual displayed
+aggregation intervals. Reports-only mode does not start the sampler.

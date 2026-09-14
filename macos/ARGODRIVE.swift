@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 import Foundation
+import Darwin
 
 // The UI owns exactly one backend. It never adopts or stops an unrelated server.
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKDownloadDelegate {
@@ -14,7 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private var serverURL: URL?
     private var startupTimer: Timer?
     private var startupDeadline = Date()
-    private var live = false
+    // Live collection is the product's primary view.  Start it by default so a
+    // fresh install immediately shows the connected drives and their activity.
+    // Reports Only remains available from Monitor for machines where sampling
+    // is not wanted (or when reviewing archived runs).
+    private var live = true
     private var stopping = false
     private var generation = 0
     private var support: URL!
@@ -32,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             webView = WKWebView(frame: .zero, configuration: config)
             webView.navigationDelegate = self
             window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 900), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.title = "ARGODRIVE — Beta 1"
+            window.title = "ARGODRIVE — Beta 3"
             window.minSize = NSSize(width: 760, height: 580)
             window.center()
             window.contentView = webView
@@ -101,14 +106,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let executable = resources.appendingPathComponent("backend/argodrive-server")
         readyFile = support.appendingPathComponent("ready-\(UUID().uuidString).json")
         do {
-            // Keep one previous log; logs never contain a bundled user's benchmark data.
-            if FileManager.default.fileExists(atPath: logURL.path) {
-                let old = support.appendingPathComponent("backend.previous.log")
-                try? FileManager.default.removeItem(at: old)
-                try? FileManager.default.moveItem(at: logURL, to: old)
-            }
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
-            backendLog = try FileHandle(forWritingTo: logURL)
+            // Retain every session log. Exclusive creation refuses collisions and symlinks.
+            logURL = support.appendingPathComponent("backend-\(UUID().uuidString).log")
+            let logFD = Darwin.open(logURL.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode_t(0o600))
+            guard logFD >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+            backendLog = FileHandle(fileDescriptor: logFD, closeOnDealloc: true)
             let process = Process()
             process.executableURL = executable
             process.arguments = ["--port", "0", "--state-dir", support.path, "--ready-file", readyFile!.path, "--parent-pid", String(ProcessInfo.processInfo.processIdentifier)] + (live ? [] : ["--reports-only"])
@@ -122,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 DispatchQueue.main.async {
                     guard let self, self.generation == thisGeneration, !self.stopping else { return }
                     self.startupTimer?.invalidate()
-                    self.showError("The local backend stopped", "Exit code \(process.terminationStatus). Use File → Show Local Log for details. No inference engine was started or stopped.")
+                    self.showError("The local backend stopped", "Exit code \(process.terminationStatus). Use File → Show Local Log for details. Only tests started by this app are managed by its backend.")
                 }
             }
             backend = process
@@ -135,9 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if let readyFile, let bytes = try? Data(contentsOf: readyFile), let obj = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
            let port = obj["port"] as? Int, let pid = obj["pid"] as? Int, pid == Int(backend?.processIdentifier ?? -1), (1024...65535).contains(port) {
             startupTimer?.invalidate(); startupTimer = nil
-            try? FileManager.default.removeItem(at: readyFile)
             serverURL = URL(string: "http://127.0.0.1:\(port)/")!
-            webView.load(URLRequest(url: serverURL!))
+            // Put the product's primary value on screen at launch.  A live
+            // session opens directly on the drive charts; report review keeps
+            // the overview landing page.
+            let initialURL = URL(string: "http://127.0.0.1:\(port)/#\(live ? "monitor" : "overview")")!
+            webView.load(URLRequest(url: initialURL))
         } else if Date() > startupDeadline {
             stopBackend()
             showError("Startup timed out", "Use File → Show Local Log to inspect the problem, then File → Reload Workspace to retry.")
@@ -148,13 +153,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         startupTimer?.invalidate(); startupTimer = nil
         if let process = backend, process.isRunning {
             process.terminate()
-            let deadline = Date().addingTimeInterval(5)
+            let deadline = Date().addingTimeInterval(25)
             while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
         backend = nil
         try? backendLog?.close(); backendLog = nil
-        if let readyFile { try? FileManager.default.removeItem(at: readyFile) }
     }
     private func local(_ url: URL?) -> Bool {
         guard let url, let serverURL else { return false }
@@ -178,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     @objc private func showLog() { if let logURL { NSWorkspace.shared.activateFileViewerSelecting([logURL]) } }
     @objc private func quit() { NSApp.terminate(nil) }
     @objc private func about() {
-        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "ARGODRIVE", .applicationVersion: "0.2.0 Beta 1 · technical preview", .credits: NSAttributedString(string: "Local AI performance workspace.\nThis build is ad-hoc signed and has not been notarized.\nRDMA and clustering are planned capabilities.")])
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "ARGODRIVE", .applicationVersion: "0.2.0 Beta 3 · technical preview", .credits: NSAttributedString(string: "Local AI performance workspace.\nThis build is ad-hoc signed and has not been notarized.\nCluster: experimental one-link transport and saved qualification evidence.\nRemote inference and RDMA are not enabled.")])
     }
     private func showError(_ title: String, _ message: String) {
         progress?.stopAnimation(nil); progress?.isHidden = true

@@ -1,0 +1,214 @@
+{
+  "mode": "layout-test",
+  "ports": 3,
+  "nodes": [
+    {
+      "id": "mac",
+      "kind": "mac",
+      "label": "MacBook Pro",
+      "model": "Apple M5 Max",
+      "memory": "128 GB",
+      "parent": null,
+      "drive_ids": []
+    },
+    {
+      "id": "internal",
+      "kind": "ssd",
+      "label": "Internal SSD",
+      "model": "Built-in storage",
+      "parent": "mac",
+      "drive_ids": [
+        "internal"
+      ]
+    },
+    {
+      "id": "port1",
+      "kind": "port",
+      "label": "Port 1",
+      "parent": "mac",
+      "connected": true,
+      "drive_ids": []
+    },
+    {
+      "id": "port2",
+      "kind": "port",
+      "label": "Port 2",
+      "parent": "mac",
+      "connected": true,
+      "drive_ids": []
+    },
+    {
+      "id": "port3",
+      "kind": "port",
+      "label": "Port 3",
+      "parent": "mac",
+      "connected": true,
+      "drive_ids": []
+    },
+    {
+      "id": "hub",
+      "kind": "hub",
+      "label": "Thunderbolt 5 hub",
+      "protocol": "Thunderbolt 5",
+      "parent": "port1",
+      "drive_ids": []
+    },
+    {
+      "id": "Green",
+      "kind": "enclosure",
+      "label": "OWC Express 1M2 80G",
+      "parent": "port2",
+      "drive_ids": [
+        "Green"
+      ],
+      "storage": [
+        {
+          "label": "Green",
+          "model": "WD_BLACK SN8100 2 TB",
+          "device": "fixture only"
+        }
+      ],
+      "source": "Layout fixture; not live discovery"
+    },
+    {
+      "id": "White",
+      "kind": "enclosure",
+      "label": "OWC Express 1M2 80G",
+      "parent": "port3",
+      "drive_ids": [
+        "White"
+      ],
+      "storage": [
+        {
+          "label": "White",
+          "model": "WD_BLACK SN8100 1 TB",
+          "device": "fixture only"
+        }
+      ],
+      "source": "Layout fixture; not live discovery"
+    },
+    {
+      "id": "Yellow",
+      "kind": "enclosure",
+      "label": "NVMe enclosure",
+      "parent": "hub",
+      "drive_ids": [
+        "Yellow"
+      ],
+      "storage": [
+        {
+          "label": "Yellow",
+          "model": "WD_BLACK SN7100 1 TB",
+          "device": "fixture only"
+        }
+      ],
+      "source": "Layout fixture; not live discovery"
+    },
+    {
+      "id": "Blue",
+      "kind": "enclosure",
+      "label": "NVMe enclosure",
+      "parent": "hub",
+      "drive_ids": [
+        "Blue"
+      ],
+      "storage": [
+        {
+          "label": "Blue",
+          "model": "WD_BLACK SN7100 1 TB",
+          "device": "fixture only"
+        }
+      ],
+      "source": "Layout fixture; not live discovery"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-internal",
+      "source": "mac",
+      "target": "internal",
+      "speed_label": "Built-in storage",
+      "kind": "internal",
+      "status": "connected"
+    },
+    {
+      "id": "edge-port1",
+      "source": "mac",
+      "target": "port1",
+      "speed_label": "",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-port2",
+      "source": "mac",
+      "target": "port2",
+      "speed_label": "",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-port3",
+      "source": "mac",
+      "target": "port3",
+      "speed_label": "",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-hub",
+      "source": "port1",
+      "target": "hub",
+      "speed_label": "80 Gb/s",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-Green",
+      "source": "port2",
+      "target": "Green",
+      "speed_label": "80 Gb/s",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-White",
+      "source": "port3",
+      "target": "White",
+      "speed_label": "80 Gb/s",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-Yellow",
+      "source": "hub",
+      "target": "Yellow",
+      "speed_label": "80 Gb/s",
+      "kind": "cable",
+      "status": "connected"
+    },
+    {
+      "id": "edge-Blue",
+      "source": "hub",
+      "target": "Blue",
+      "speed_label": "80 Gb/s",
+      "kind": "cable",
+      "status": "connected"
+    }
+  ],
+  "shared_uplinks": [
+    {
+      "node_id": "hub",
+      "label": "Thunderbolt 5 hub",
+      "drive_ids": [
+        "Blue",
+        "Yellow"
+      ],
+      "reported_link": "80 Gb/s",
+      "calibrated_gbps": null
+    }
+  ],
+  "errors": [
+    "LAYOUT TEST \u00b7 Five-drive fixture, not live hardware discovery. Read measurements are unavailable."
+  ]
+}
