@@ -15,6 +15,7 @@ import plistlib
 import subprocess
 import time
 
+from engine_log import dead_knobs, prefill_path
 from model_support import DS41_Q4_BYTES, DS41_Q4_SHA256, DS41_REVISION
 
 
@@ -67,8 +68,8 @@ def parse_result(path, prompt_tokens, output_tokens):
 def plan(engine, model, prompt, out, prompt_tokens=512, output_tokens=128):
     # 40 tokens is a fast screening rung. It is intentionally excluded from
     # publication/qualification guidance; those still use 60/128/512.
-    if prompt_tokens not in (116, 128, 512, 2048) or output_tokens not in (40, 60, 128, 512):
-        raise ValueError('Supported preparation rungs: 116/128/512/2048 prompt, 40/60/128/512 generation.')
+    if prompt_tokens not in (116, 128, 512, 2048) or output_tokens not in (40, 60, 100, 128, 200, 512):
+        raise ValueError('Supported preparation rungs: 116/128/512/2048 prompt, 40/60/100/128/200/512 generation.')
     paths = [Path(x).expanduser().resolve() for x in (engine, model, prompt, out)]
     engine, model, prompt, out = paths
     if not engine.is_file() or not os.access(engine, os.X_OK) or not prompt.is_file():
@@ -210,7 +211,13 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
                'DS4_METAL_STREAMING_EXPERT_PREAD_THREADS', 'DS4_ARGODRIVE_PRIMARY_NOCACHE', 'DS4_ARGODRIVE_RESIDENT_GATE', 'DS4_ARGODRIVE_PRECOMMIT', 'DS4_ARGODRIVE_FLAT_READS', 'DS4_ARGODRIVE_Q8_BF16', 'DS4_ARGODRIVE_Q8_ROWS', 'DS4_ARGODRIVE_EARLY_EVENT',
                'DS4_METAL_CB_TIMES', 'DS4_METAL_GPU_BUSY_PROFILE',
                'DS4_METAL_DISABLE_STREAMING_EXPERT_READAHEAD',
-               'DS4_METAL_STREAMING_EXPERT_TIMING_SUMMARY'}
+               'DS4_METAL_STREAMING_EXPERT_TIMING_SUMMARY',
+               # Prefill staging (2026-09-15). Without these the profile's prefill
+               # knobs were rejected here and a Test Setup run measured the
+               # unfixed layer-major sweep.
+               'DS4_ARGODRIVE_PREFILL_SPLIT', 'DS4_ARGODRIVE_PREFILL_SELECTIVE',
+               'DS4_ARGODRIVE_PREFILL_SELECTIVE_MAX', 'DS4_ARGODRIVE_PREFILL_AHEAD',
+               'DS4_ARGODRIVE_PREFILL_LANES', 'DS4_ARGODRIVE_PREFILL_PIPE'}
     if any(k not in allowed or not isinstance(v, str) or '\0' in v
            for k, v in experimental_env.items()):
         raise ValueError('Unsupported experimental environment setting.')
@@ -258,8 +265,14 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
         if replicas:
             env['DS4_ARGODRIVE_REPLICAS'] = ','.join(x+'*1' for x in replicas)
             env['DS4_ARGODRIVE_PRIMARY_WEIGHT'] = str(primary_weight)
+        # A knob the binary never reads measures nothing. Record it loudly rather
+        # than refuse: a stored profile may carry settings for another build.
+        dead = dead_knobs(p['argv'][0], experimental_env)
+        if dead:
+            print('WARNING: %d setting(s) do not exist in this engine binary and will have no effect: %s'
+                  % (len(dead), ', '.join(dead)), flush=True)
         state = {'verification_method':verification_method, 'status':'running', 'started_at':datetime.now(timezone.utc).isoformat(),
-                 'model_sha256': DS41_Q4_SHA256, 'publication_ready':False}
+                 'model_sha256': DS41_Q4_SHA256, 'publication_ready':False, 'dead_knobs': dead}
         process = None
         sampler_process = None
         sampler_log = None
@@ -303,6 +316,11 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
             if verification_receipt:
                 check_verification_receipt(verification_receipt, model, replicas)
             raw = (out/'baseline.engine.txt').read_bytes()
+            # What the prefill path actually did, from the log: staged/selective,
+            # or silently back on the layer-major sweep. On 2026-09-15 a single-
+            # drive arm was rejected with `reader invalid=0 sources=1` and nothing
+            # else in the result would have said so.
+            result['prefill_path'] = prefill_path(raw)
             marker = ('ds4-bench: gen[ctx='+str(p['prompt_tokens'])+'] decoded text: "').encode()
             traffic = re.findall(rb'^ds4: Argodrive source\[(\d+)\] bytes=(\d+)$', raw, re.M)
             if replicas:
