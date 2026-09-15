@@ -462,7 +462,12 @@ function driveReadBars(points,color,scale,seconds=20, data=null, id=null){
 function combinedReadCard(points,scale,seconds,count,current=null){
   const stats=readWindowStats(points||[],seconds,scale.end);
   const peak=Math.max(0,...stats.points.map(p=>p[1]));
-  const totalScale={end:scale.end,ceiling:Math.max(4,Math.ceil(peak*1.15/4)*4)};
+  /* Match the per-drive axis so the two are directly comparable: a combined
+   * chart that auto-scales while each drive is pinned to a fixed ceiling makes
+   * the total look SMALLER than one of its parts. Fall back to the old
+   * auto-scale only if the aggregate would overflow the fixed axis. */
+  const fixedTotal=scale.ceiling*Math.max(1,count);
+  const totalScale={end:scale.end,ceiling:peak>fixedTotal?Math.ceil(peak*1.15/4)*4:fixedTotal};
   const chart=driveReadBars(points,'var(--accent)',totalScale,seconds).replace('Read throughput over','Combined read throughput over').replace('shared scale zero','aggregate scale zero');
   return `<section class="device-card live-drive-card combined-drive-card" aria-label="Combined SSD reads"><div class="live-drive-head"><div><h3>Combined</h3><p>${count} SSDs · 0–${fmt(totalScale.ceiling,0)} GB/s</p></div>${finite(current)?`<div class="metric-value" title="Current aggregate read rate">${fmt(current)} <span class="unit">GB/s</span></div>`:''}</div>${chart}</section>`;
 }
