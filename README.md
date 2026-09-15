@@ -1,14 +1,88 @@
 # ARGODRIVE
 
-Live SSD monitoring and benchmark comparison for local model inference. The current Apple-silicon app is available as a technical beta.
+**Layout, balancer and instruments for running mixture-of-experts models from SSDs.**
+When a model does not fit in RAM, every token waits on disk. ARGODRIVE decides where the
+expert weights live across your drives, splits each read across them in proportion to
+measured device speed, and shows you — in milliseconds, per drive, per phase — what the
+engine is actually waiting for.
 
-## Download and test the beta
+Three models, two engines, one 128 GB laptop.
+
+## What it has done
+
+| model | engine | storage | decode tok/s | prompt processing tok/s |
+|---|---|---|--:|--:|
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | 4 drives | 10.49 → **17.20** (1.6×) | 16.27 → **44.50** (2.7×) |
+| GLM-5.3, 744B | ds4 fork | 4 drives | 2.02 → **3.70** | — |
+| Kimi K3, 2.78T | deltafin fork | 4 drives | 0.41 → **1.10** | — |
+
+All on an M5 Max, 128 GB. Each "before" is a measured control on the same machine in the
+same session — not a published figure from somewhere else. For V4.1 the control is the
+*pinned upstream ds4 binary* (`bd66c40`, single drive) producing a **byte-identical output
+hash** to the candidate, so the comparison is like-for-like; every one of the 73 arms behind
+that row carries the same hash. Medians of interleaved pairs, 512-token prompt, 200 generated.
+
+Run the candidate straight after a baseline arm — which pushes 300 GB through the internal
+SSD — and it loses about 9%. On a settled machine the same V4.1 config measures **49.17**
+prompt processing over four arms, which is **2.9×**. The table quotes the conservative pair.
+
+Time to first token on a 512-token prompt, which is the question everyone asks next:
+**31.5 s → 11.5 s**.
+
+## What the instruments show
+
+![Per-drive read timeline](charts/read-timeline.png)
+
+*Per-drive throughput across one 200-token run, all four drives sampled together. The first
+~12 s is model load and prompt; decode follows. (Kimi K3 record arm, 2026-09-08.)*
+
+The view that matters most is not this one, though. It is read **latency**: V4.1 decode
+averages 5.2 GB/s, about 19% of these drives' combined ceiling, and still gets faster when
+you add a fourth drive. No throughput chart can explain that. Milliseconds per read can.
+
+## How it works, in five lines
+
+1. One device holds the complete expert set; the others hold usage-weighted replicas.
+2. Each read is split across the devices that hold it, in proportion to measured device rate.
+3. Both read paths dispatch by expected completion time, with shared in-flight counters.
+4. During prefill, layer N+1 is staged while the GPU computes layer N.
+5. Only the experts the router actually selected are read — for V4.1 at 512 tokens that is
+   187 of 384 per layer, so the stock layer-major sweep was reading about twice what the
+   model touches.
+
+## Why more drives help when bandwidth is not the limit
+
+A layer cannot start until **every** routed expert has arrived. So it costs the *maximum*
+over its reads, not the sum. Adding a drive does not mainly add bandwidth — it makes each
+slice of a split read smaller, so the slice that lands last lands sooner. That is why a
+fourth drive moved peak throughput hardly at all and still bought +6.6% prefill and +2.9%
+decode, and it is why aggregate GB/s is the wrong number to optimise.
+
+## The engine branch
+
+The V4.1 work lives in our fork of Salvatore Sanfilippo's ds4:
+
+**[`argonautlabsai/ds4-argodrive` @ `argonaut-v41-benchmark`](https://github.com/argonautlabsai/ds4-argodrive/tree/argonaut-v41-benchmark)** — commit `18fc795`
+
+**What is reproducible from these repos.** A fresh clone of that branch builds `ds4` and
+`ds4-bench` on Apple silicon with the multi-source reader compiled in — not stubs. Verified
+2026-09-15 from a clean clone. Reproducing the *number* additionally needs N byte-identical
+replicas of the 518 GB model file on separate devices, which is a hardware precondition we
+cannot hand you in a repo; the loader checks replica size, not content. A single-drive clone
+runs correctly and simply sees no split.
+
+## Download the Mac beta
 
 [**Download ARGODRIVE for Apple silicon**](https://github.com/argonautlabsai/argodrive/releases/tag/v0.2.0-beta.3) · [**Installation and testing guide**](https://github.com/argonautlabsai/argodrive/blob/beta-20260914/docs/BETA-TESTING.md) · [**Beta source**](https://github.com/argonautlabsai/argodrive/tree/beta-20260914)
 
-Open Live Hardware to check connected drives, memory and activity. Choose a folder of supported benchmark runs to inspect results and compare configurations. Report launch, drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues). Review any attachments for private paths and prompts before sharing.
+Open Live Hardware to check connected drives, memory and activity. Choose a folder of
+supported benchmark runs to inspect results and compare configurations. Report launch,
+drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues).
+Review any attachments for private paths and prompts before sharing.
 
-This is a monitoring and saved-run analysis preview, not an automatic optimizer. The app does not include model weights. Engine tests use the separate [complete V4.1 fork and reproduction recipe](https://github.com/argonautlabsai/ds4/tree/argonaut-v41-benchmark). The beta is ad-hoc signed and not notarized; see the testing guide before installing.
+This is a monitoring and saved-run analysis preview, not an automatic optimizer, and it does
+not include model weights. The beta is ad-hoc signed and not notarized; see the testing guide
+before installing.
 
 ## Legacy Deltafin tools and recorded charts
 
