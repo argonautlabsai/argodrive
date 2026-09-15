@@ -11,7 +11,7 @@ const names={overview:'Overview',benchmark:'Benchmark',monitor:'Monitor',engram:
 const colors=['var(--blue)','var(--teal)','var(--orange)','var(--purple)','var(--accent)'];
 const devColor=(dev,i=0)=>({internal:colors[0],Green:colors[1],White:colors[2],Yellow:colors[3],Blue:colors[4]}[dev]||colors[i%colors.length]);
 const native=window.webkit?.messageHandlers?.argodrive;
-const state={rows:[],data:null,settings:null,route:'overview',selected:new Set(),baseline:'',candidate:'',filters:{},page:0,detail:new Map(),paused:false,liveWindow:20,monitorCombined:true,monitorShowSSD:true,monitorShowEngram:false,monitorView:'storage',monitorSource:'latest',monitorSourceSet:false,monitorCursor:null,monitorEpoch:0,diagnostic:'reads',trace:'',expert:'',loadVersion:0,connected:false,ssdWindow:120,ssdFilter:'connected',ssdScale:'shared',streamingRun:'',streamingView:'engine',topology:null,topologySelected:'mac',topologyEmpty:true,topologyZoom:'fit',topologyLoading:false};
+const state={rows:[],data:null,settings:null,route:'overview',selected:new Set(),baseline:'',candidate:'',filters:{},page:0,detail:new Map(),paused:false,liveWindow:20,monitorCombined:true,monitorAdvanced:false,monitorShowSSD:true,monitorShowEngram:false,monitorView:'storage',monitorSource:'latest',monitorSourceSet:false,monitorCursor:null,monitorEpoch:0,diagnostic:'reads',trace:'',expert:'',loadVersion:0,connected:false,ssdWindow:120,ssdFilter:'connected',ssdScale:'shared',streamingRun:'',streamingView:'engine',topology:null,topologySelected:'mac',topologyEmpty:true,topologyZoom:'fit',topologyLoading:false};
 let toastTimer;
 const badge=(text,kind='')=>`<span class="badge ${kind}">${esc(text)}</span>`;
 const val=(x,d=2)=>esc(fmt(x,d));
@@ -21,6 +21,7 @@ const shortModel=r=>(r?.model||'Model not recorded').replace(/-RoutedQ4K$/,'');
 const date=r=>String(r?.ran||'Time not recorded').replace(/^\d{4}-/, '').replace(/:\d\d$/, '');
 const safeStore=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};
 try{state.monitorCombined=localStorage.getItem('argodrive-monitor-combined')!=='false';}catch{}
+try{state.monitorAdvanced=localStorage.getItem('argodrive-monitor-advanced')==='true';}catch{}
 try{state.monitorView=localStorage.getItem('argodrive-monitor-view')||'storage';}catch{}
 try{state.monitorShowSSD=localStorage.getItem('argodrive-monitor-show-ssd')!=='false';}catch{}
 try{state.monitorShowEngram=localStorage.getItem('argodrive-monitor-show-engram')==='true'||state.monitorView==='engram';}catch{}
@@ -57,7 +58,7 @@ function updateChrome(){
 }
 async function refresh(){
   $('#refresh').disabled=true;
-  try{const [data,stats,settings]=await Promise.all([api('/data'),api('/stats'),api('/settings')]);state.data=data;state.rows=flatten(stats.blocks);state.settings=settings;state.detail.clear();state.connected=true;notice(spotlightStartupNotice(data));state.selected=new Set([...state.selected].filter(id=>findRun(id)));
+  try{const [data,stats,settings]=await Promise.all([api('/data'),api('/stats'),api('/settings')]);state.data=data;captureReadOps(data);state.rows=flatten(stats.blocks);state.settings=settings;state.detail.clear();state.connected=true;notice(spotlightStartupNotice(data));state.selected=new Set([...state.selected].filter(id=>findRun(id)));
     // A live backend should open on the actual hardware charts. The runner
     // feed remains an explicit choice for completed/past test inspection.
     if(data.mode==='live'&&!state.monitorSourceSet&&state.monitorSource==='latest')state.monitorSource='hardware';
@@ -212,7 +213,7 @@ async function openMonitorTest(){
     $('#monitor-test-body').innerHTML=`<form id="monitor-test-form"><label class="field">Model / engine<select id="monitor-test-model">${d.options.models.map(m=>`<option value="${esc(m.id)}" ${m.id===defaultModel?'selected ':''}${m.ready?'':'disabled'}>${esc(m.label)}${m.ready?' · '+esc(m.engine):' — '+esc(m.reason)}</option>`).join('')}</select></label><fieldset><legend>Read weights from these drives</legend><div id="monitor-test-drives"></div></fieldset><div class="test-size-fields"><label class="field">Context capacity<select id="monitor-test-context">${d.options.contexts.map(n=>`<option value="${n}" ${n===4096?'selected':''}>${n.toLocaleString()} tokens</option>`).join('')}</select><small>Maximum context capacity; the prompt stays fixed.</small></label><label class="field">Generate<select id="monitor-test-tokens">${d.options.tokens.map(n=>`<option value="${n}" ${n===100?'selected':''}>${n} tokens</option>`).join('')}</select><small>Number of output tokens for this test.</small></label></div><p class="test-settings-note" id="monitor-test-settings"></p><p class="test-settings-note">One cold application-cache run, greedy output, no speculation. Selected drives use existing full replicas; no files are copied. Results and exact settings are saved in the Run library. Larger context uses the engine’s automatic cache budget.</p><div class="test-dialog-actions"><span id="monitor-test-status" role="status">${esc(testStatusText())}</span><button class="button primary" id="monitor-test-start" type="submit" ${d.run.owned?'disabled':''}>Start test</button></div></form>`;
     const update=()=>{const model=d.options.models.find(m=>m.id===$('#monitor-test-model').value);$('#monitor-test-drives').innerHTML=(model?.drives||[]).map(x=>`<label class="test-drive-option"><input type="checkbox" value="${esc(x.id)}" ${x.ready?'checked':'disabled'}><span>${esc(x.label)}<small>${x.ready?'Split weight '+x.weight:esc(x.reason)}</small></span></label>`).join('')||'<p>No runnable drive profile is configured.</p>';$('#monitor-test-start').disabled=!!monitorTestRun.owned||!model?.ready;$('#monitor-test-settings').textContent=(model?.read_method||'ds4 split reads')+' · '+(model?.read_threads||48)+' read workers · read-ahead '+(model?.read_ahead||'configured')+' · F_NOCACHE · cache: '+(Number($('#monitor-test-context').value)<=4096?'70 GB':'automatic');};
     $('#monitor-test-model').onchange=update;$('#monitor-test-context').onchange=update;update();
-    $('#monitor-test-form').onsubmit=async e=>{e.preventDefault();if(monitorTestBusy)return;monitorTestBusy=true;$('#monitor-test-start').disabled=true;$('#monitor-test-status').textContent='Checking selected drives and engine…';try{monitorTestRun=await api('/test-runner/start',{method:'POST',headers:{'Content-Type':'application/json','X-Argodrive-Token':state.settings.token},body:JSON.stringify({model:$('#monitor-test-model').value,drives:[...dialog.querySelectorAll('#monitor-test-drives input:checked')].map(x=>x.value),context:Number($('#monitor-test-context').value),tokens:Number($('#monitor-test-tokens').value)})});state.monitorSource='latest';state.monitorCursor=null;state.monitorEpoch++;harnessSelected='';dialog.close();renderMonitor();toast('Test started. Monitor will follow its recording.');}catch(err){$('#monitor-test-status').textContent=err.message;$('#monitor-test-start').disabled=false;}finally{monitorTestBusy=false;}};
+    $('#monitor-test-form').onsubmit=async e=>{e.preventDefault();if(monitorTestBusy)return;monitorTestBusy=true;$('#monitor-test-start').disabled=true;$('#monitor-test-status').textContent='Checking selected drives and engine…';try{monitorTestRun=await api('/test-runner/start',{method:'POST',headers:{'Content-Type':'application/json','X-Argodrive-Token':state.settings.token},body:JSON.stringify({model:$('#monitor-test-model').value,drives:[...dialog.querySelectorAll('#monitor-test-drives input:checked')].map(x=>x.value),context:Number($('#monitor-test-context').value),tokens:Number($('#monitor-test-tokens').value)})});state.monitorSource='latest';state.monitorSourceSet=true;state.monitorCursor=null;state.monitorEpoch++;harnessSelected='';dialog.close();renderMonitor();toast('Test started. Monitor will follow its recording.');}catch(err){$('#monitor-test-status').textContent=err.message;$('#monitor-test-start').disabled=false;}finally{monitorTestBusy=false;}};
   }catch(e){$('#monitor-test-body').textContent='Test controls unavailable: '+e.message;}
 }
 async function stopMonitorTest(){if(!monitorTestRun.owned)return;try{monitorTestRun=await api('/test-runner/stop',{method:'POST',headers:{'Content-Type':'application/json','X-Argodrive-Token':state.settings.token},body:JSON.stringify({id:monitorTestRun.id})});toast('Stopping this Monitor test; partial results will be retained.');pollMonitorTest();}catch(e){toast(e.message);}}
@@ -233,14 +234,140 @@ function monitorStages(d){
   return `<section class="monitor-stages" aria-label="Inference stages"><div class="monitor-stage-steps">${steps.map(([id,label],i)=>`<div class="monitor-stage ${live&&current===id?'active':seen.has(id)?'observed':''}" ${live&&current===id?'aria-current="step"':''}><span>${i+1}</span>${label}</div>`).join('')}<strong class="monitor-stage-state">${esc(!live&&!terminal?'Last reported: ':'')}${esc(labels[current]||labels.unknown)}</strong></div><p>${esc(detail)}${state.monitorSource==='past'?' · Whole-run stages; not the chart cursor.':''}</p></section>`;
 }
 function isTestMonitor(){return state.route==='monitor'&&state.monitorSource!=='hardware';}
+
+/* Advanced read analysis.
+ *
+ * The throughput charts answer "how many bytes per second", and on this workload
+ * they never approach the drives' combined ceiling — yet adding a drive still
+ * makes decode faster. That is because a streamed MoE does not wait for
+ * bandwidth, it waits for one read to finish. Splitting a read across N drives
+ * leaves each drive a smaller slice, so the slice that finishes last finishes
+ * sooner, even though the peak rate barely moves.
+ *
+ * These panels show the quantity that actually moves: milliseconds per read,
+ * and how many reads are in flight while the engine waits. Both come from
+ * IOKit's completed-read statistics (bytes, count and total service time per
+ * device), which the backend already reports as read_operations.
+ */
+
+const PAD = {l: 46, r: 12, t: 12, b: 20};
+const W = 640, H = 150;
+
+const concurrency = s => finite(s?.read_iops) && finite(s?.mean_read_ms) ? s.read_iops * s.mean_read_ms / 1000 : null;
+
+function axis(max, unit, digits) {
+  const rows = [0, .25, .5, .75, 1].map(f => {
+    const y = PAD.t + (H - PAD.t - PAD.b) * (1 - f), v = max * f;
+    return `<line class="adv-grid" x1="${PAD.l}" y1="${y.toFixed(1)}" x2="${W - PAD.r}" y2="${y.toFixed(1)}"></line>` +
+           `<text class="adv-tick" x="${PAD.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${fmt(v, digits)}</text>`;
+  }).join('');
+  return rows + `<text class="adv-unit" x="${PAD.l - 6}" y="${PAD.t - 3}" text-anchor="end">${esc(unit)}</text>`;
+}
+
+/* One line per drive over the client-side history buffer. Points are spaced by
+ * their own timestamps, so a stalled poll leaves a gap rather than a fake slope. */
+function series(history, devices, pick, max, unit, digits) {
+  if (!history.length || !(max > 0)) return '';
+  const t0 = history[0].t, t1 = history[history.length - 1].t, span = Math.max(1, t1 - t0);
+  const x = t => PAD.l + (W - PAD.l - PAD.r) * ((t - t0) / span);
+  const y = v => PAD.t + (H - PAD.t - PAD.b) * (1 - Math.min(1, v / max));
+  let peak = {v: -1, t: 0, id: ''};
+  const lines = devices.map(dev => {
+    const pts = [];
+    for (const row of history) {
+      const v = pick(row.ops?.[dev.id]);
+      if (!finite(v)) { pts.push(null); continue; }
+      if (v > peak.v) peak = {v, t: row.t, id: dev.id};
+      pts.push(`${x(row.t).toFixed(1)},${y(v).toFixed(1)}`);
+    }
+    const runs = [];
+    let run = [];
+    for (const p of pts) { if (p) run.push(p); else if (run.length) { runs.push(run); run = []; } }
+    if (run.length) runs.push(run);
+    return runs.filter(r => r.length > 1)
+      .map(r => `<polyline class="adv-line" points="${r.join(' ')}" style="stroke:${esc(dev.color || '#6153dc')}"></polyline>`).join('');
+  }).join('');
+  /* Mark the worst moment: this is the "when does it spike" question. */
+  const mark = peak.v > 0 ? `<circle class="adv-peak-dot" cx="${x(peak.t).toFixed(1)}" cy="${y(peak.v).toFixed(1)}" r="3.5"></circle>` +
+    `<text class="adv-peak-label" x="${Math.min(W - PAD.r - 4, x(peak.t) + 6).toFixed(1)}" y="${Math.max(PAD.t + 10, y(peak.v) - 6).toFixed(1)}">peak ${fmt(peak.v, digits)} ${esc(unit)}</text>` : '';
+  return `<svg class="adv-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(unit)} per drive over the sampled window; peak ${fmt(peak.v, digits)}">${axis(max, unit, digits)}${lines}${mark}</svg>`;
+}
+
+function bar(value, max, color) {
+  const pct = finite(value) && max > 0 ? Math.max(1, Math.min(100, value / max * 100)) : 0;
+  return `<span class="adv-bar"><i style="width:${pct.toFixed(1)}%;background:${esc(color)}"></i></span>`;
+}
+
+function advancedReadsView(data, history, {window: seconds = 20, devices = []} = {}) {
+  const ops = data.read_operations || {};
+  const live = devices.filter(d => d.present !== false);
+  if (!live.length) {
+    return `<section class="panel"><div class="panel-head"><div><h2>Advanced read analysis</h2>
+      <p>No drives are reporting completed reads yet.</p></div></div></section>`;
+  }
+  const end = data.seconds;
+  const rows = live.map(dev => {
+    const s = ops[dev.id] || {};
+    const win = readWindowStats(data.read_windows?.[dev.id] || [], seconds, end);
+    return {dev, s, win, flight: concurrency(s)};
+  });
+  const maxMs = Math.max(0.05, ...history.flatMap(r => live.map(d => r.ops?.[d.id]?.mean_read_ms || 0)), ...rows.map(r => r.s.mean_read_ms || 0));
+  const maxFlight = Math.max(0.5, ...history.flatMap(r => live.map(d => concurrency(r.ops?.[d.id]) || 0)), ...rows.map(r => r.flight || 0));
+  const maxPeak = Math.max(0.1, ...rows.map(r => r.win.peak || 0));
+  const totalFlight = rows.reduce((a, r) => a + (r.flight || 0), 0);
+  const slowest = rows.reduce((a, r) => (r.s.mean_read_ms || 0) > (a?.s.mean_read_ms || 0) ? r : a, null);
+
+  const legend = rows.map(r => `<span class="adv-key"><i style="background:${esc(r.dev.color || '#6153dc')}"></i>${esc(r.dev.label || r.dev.id)}</span>`).join('');
+  const table = rows.map(r => `<tr>
+      <th scope="row"><span class="adv-swatch" style="background:${esc(r.dev.color || '#6153dc')}"></span>${esc(r.dev.label || r.dev.id)}</th>
+      <td class="cell-num">${fmt(r.s.mean_read_ms, 2)}<span class="run-sub">ms / read</span></td>
+      <td>${bar(r.s.mean_read_ms, maxMs, r.dev.color || '#6153dc')}</td>
+      <td class="cell-num">${fmt(r.flight, 2)}<span class="run-sub">in flight</span></td>
+      <td class="cell-num">${fmt(r.win.peak, 2)}<span class="run-sub">peak GB/s</span></td>
+      <td class="cell-num">${fmt(r.win.mean, 2)}<span class="run-sub">mean GB/s</span></td>
+      <td class="cell-num">${finite(r.win.peak) && r.win.peak > 0 ? fmt(r.win.mean / r.win.peak * 100, 0) : '—'}<span class="run-sub">% duty</span></td>
+      <td class="cell-num">${fmt(r.s.mean_read_kib, 0)}<span class="run-sub">KiB / read</span></td>
+    </tr>`).join('');
+
+  return `<section class="panel adv-panel"><div class="panel-head"><div><h2>Advanced read analysis</h2>
+      <p>Milliseconds per read and reads in flight, from IOKit completed-read statistics. This is the quantity an extra drive changes.</p></div>
+      <div class="adv-legend">${legend}</div></div>
+    <div class="panel-body adv-body">
+      <div class="adv-explain">A streamed MoE waits for <strong>one read to finish</strong>, not for bandwidth. Splitting each read across more drives gives every drive a smaller slice, so the slice that lands last lands sooner &mdash; the peak rate barely moves while the wait shrinks. Watch <strong>ms / read</strong> fall as drives are added, and compare <strong>% duty</strong>: a low duty cycle with a high peak means the drives are idle between bursts, so bandwidth is not the limit.</div>
+      <div class="adv-grid-2">
+        <figure><figcaption>Time per read &middot; ms &middot; last ${history.length} samples</figcaption>${series(history, live, s => s?.mean_read_ms, maxMs, 'ms', 2) || '<p class="muted">Collecting&hellip;</p>'}</figure>
+        <figure><figcaption>Reads in flight &middot; service time &divide; elapsed</figcaption>${series(history, live, concurrency, maxFlight, 'in flight', 2) || '<p class="muted">Collecting&hellip;</p>'}</figure>
+      </div>
+      <div class="table-scroll"><table class="adv-table"><caption>Per drive over the last ${seconds} seconds &middot; peak is the highest sampled interval, duty is mean &divide; peak</caption>
+        <thead><tr><th>Drive</th><th class="cell-num">Latency</th><th></th><th class="cell-num">Concurrency</th><th class="cell-num">Peak</th><th class="cell-num">Mean</th><th class="cell-num">Duty</th><th class="cell-num">Size</th></tr></thead>
+        <tbody>${table}</tbody></table></div>
+      <div class="adv-readout">
+        <span>Combined reads in flight <strong>${fmt(totalFlight, 2)}</strong></span>
+        <span>Slowest drive now <strong>${slowest ? esc(slowest.dev.label || slowest.dev.id) : '—'}</strong>${slowest && finite(slowest.s.mean_read_ms) ? ` at <strong>${fmt(slowest.s.mean_read_ms, 2)} ms</strong>` : ''}</span>
+        <span class="muted">A split read completes when the slowest slice does, so that drive sets the wait.</span>
+      </div>
+    </div></section>`;
+}
+
+/* read_operations is a rolling 5 s snapshot, so the advanced charts keep their own
+ * short history here. Timestamped, so a missed poll shows a gap, not a slope. */
+const readOpsHistory=[];
+function captureReadOps(d){
+  if(!d||!d.read_operations)return;
+  const t=Date.now()/1000,last=readOpsHistory[readOpsHistory.length-1];
+  if(last&&t-last.t<0.5)return;
+  readOpsHistory.push({t,ops:d.read_operations});
+  while(readOpsHistory.length>240)readOpsHistory.shift();
+}
 function monitorHeading(){
   const hardware=state.monitorSource==='hardware';
   return heading('Monitor','Choose current hardware activity or a test’s recorded measurements.',
-    `<fieldset class="monitor-mode-toggles"><legend>Chart layers</legend><label><input type="checkbox" id="monitor-show-ssd" ${state.monitorShowSSD?'checked':''}> SSDs</label><label><input type="checkbox" id="monitor-show-engram" ${state.monitorShowEngram?'checked':''}> Monitor Engram</label></fieldset><label class="live-toolbar">Source <select id="monitor-source" aria-label="Monitor data source">${[['latest','Follow latest test'],['hardware','Live hardware'],['past','Past test…']].map(([v,label])=>`<option value="${v}" ${state.monitorSource===v?'selected':''}>${label}</option>`).join('')}</select></label><label class="live-toolbar">Window <select id="live-window" aria-label="Drive chart time window">${[[10,'Past 10 seconds'],[20,'Past 20 seconds'],[60,'Past minute']].map(([n,label])=>`<option value="${n}" ${state.liveWindow===n?'selected':''}>${label}</option>`).join('')}</select></label>`+
+    `<fieldset class="monitor-mode-toggles"><legend>Chart layers</legend><label><input type="checkbox" id="monitor-show-ssd" ${state.monitorShowSSD?'checked':''}> SSDs</label><label><input type="checkbox" id="monitor-show-engram" ${state.monitorShowEngram?'checked':''}> Monitor Engram</label><label title="Milliseconds per read and reads in flight — what an extra drive actually changes"><input type="checkbox" id="monitor-advanced" ${state.monitorAdvanced?'checked':''}> Advanced</label></fieldset><label class="live-toolbar">Source <select id="monitor-source" aria-label="Monitor data source">${[['latest','Follow latest test'],['hardware','Live hardware'],['past','Past test…']].map(([v,label])=>`<option value="${v}" ${state.monitorSource===v?'selected':''}>${label}</option>`).join('')}</select></label><label class="live-toolbar">Window <select id="live-window" aria-label="Drive chart time window">${[[10,'Past 10 seconds'],[20,'Past 20 seconds'],[60,'Past minute']].map(([n,label])=>`<option value="${n}" ${state.liveWindow===n?'selected':''}>${label}</option>`).join('')}</select></label>`+
     (hardware?button(state.paused?'Resume display':'Pause display','pause-live','',state.paused?'play':'pause'):linkButton('Run library','runs','','runs'))+monitorTestButtons())+
     `<div class="monitor-source-note" title="${hardware?'Includes other apps and background work.':'Switching sources does not start a test or change hardware collection.'}"><span>${hardware?'Live · system-wide reads':'Runner-recorded SSD reads'} · GB/s · fixed 0–16 GB/s per drive · solid average / dashed peak${state.monitorShowEngram?' · <i class="monitor-key weights"></i> weights / <i class="monitor-key engram"></i> Engram':''}</span><label class="monitor-combined-toggle"><input type="checkbox" id="monitor-combined" ${state.monitorCombined!==false?'checked':''}> Show combined</label></div>`;
 }
 function bindMonitorControls(){
+  if($('#monitor-advanced'))$('#monitor-advanced').onchange=e=>{state.monitorAdvanced=e.target.checked;safeStore('argodrive-monitor-advanced',String(state.monitorAdvanced));renderMonitor();};
   if($('#monitor-show-ssd'))$('#monitor-show-ssd').onchange=e=>{state.monitorShowSSD=e.target.checked;safeStore('argodrive-monitor-show-ssd',String(state.monitorShowSSD));renderMonitor();};
   if($('#monitor-show-engram'))$('#monitor-show-engram').onchange=e=>{state.monitorShowEngram=e.target.checked;safeStore('argodrive-monitor-show-engram',String(state.monitorShowEngram));renderMonitor();};
   if($('#monitor-combined'))$('#monitor-combined').onchange=e=>{state.monitorCombined=e.target.checked;safeStore('argodrive-monitor-combined',String(state.monitorCombined));renderMonitor();$('#monitor-combined')?.focus();};
@@ -535,6 +662,7 @@ function renderLive(){
     (report?`<section class="panel">${empty('Live collection is off','You are reviewing saved reports. Start ARGODRIVE in live mode to see connected drives, engine activity and memory.',linkButton('How to enable live collection','settings','primary','live'),'live')}</section>`:
     `<div class="summary-strip"><span>${badge(state.paused?'Display paused':p.state||'Detection unavailable',canRate?'green':'')} <span style="margin-left:10px">${esc((p.engines||[]).map(e=>e.engine+' · PID '+e.pid).join(' / ')||'No engine identity available')}</span></span><span>${scope?'Fresh storage samples':'No fresh storage samples'} · ${d.sample_ms} ms collection · 1 s display</span></div><div class="metrics">${metric(p.unit==='chunks/s'?'Response writes':'Generation rate',unit(canRate?p.rate:null,p.unit||'tok/s'),esc(p.source||'Source unavailable'),'bolt',true)}${metric('Aggregate reads',unit(state.connected?d.cur_total:null,'GB/s'),d.cap_total?`${fmt(d.cap_total)} GB/s calibrated ceiling`:'Ceiling not calibrated','disk')}${metric('GPU activity',unit(fresh&&state.connected?sys.gpu:null,'% ',0),'System measurement · not engine attribution','live')}${metric('Available memory',unit(fresh&&state.connected?sys.ram_avail:null,'GiB',1),'Includes reclaimable memory','memory')}</div>`+
     `${state.monitorShowEngram&&!hasAttribution(d,devices)?`<div class="monitor-attribution-note"><strong>Weights + Engram overlay enabled</strong><span>${state.monitorShowSSD?'Waiting for per-request class telemetry. Grey bars remain device-wide until the engine supplies class intervals.':'Waiting for per-request class telemetry; SSD bars are hidden until selected.'}</span></div>`:''}${(state.monitorShowSSD||state.monitorShowEngram)?`<div class="live-drive-stack">${devices.map((x,i)=>{const color=devColor(x.id,i),rate=state.connected?d.cur?.[x.id]:null,cap=d.cap?.[x.id];return `<section class="device-card live-drive-card"><div class="live-drive-head"><div><h3><span class="legend-dot" style="background:${color}"></span>${esc(x.label||x.id)}</h3><p>${esc(x.connection)} · ${esc(x.device||'Not mounted')}</p></div><div><div class="metric-value">${unit(rate,'GB/s')}</div></div></div>${driveReadBars(d.read_windows?.[x.id],color,barScale,state.liveWindow,d,x.id)}<div class="device-facts"><span>Session peak ${d.traces?.[x.id]?.length?fmt(d.peaks?.[x.id])+' GB/s':'—'}</span><span>${finite(cap)?'Calibrated ceiling '+fmt(cap)+' GB/s':'Ceiling not calibrated'}</span></div></section>`;}).join('')}${state.monitorShowSSD&&state.monitorCombined!==false?combinedReadCard(d.read_windows?.TOTAL,barScale,state.liveWindow,devices.length,state.connected?d.cur_total:null):''}</div>`:empty('No chart layer selected','Enable SSDs or Monitor Engram above.')}`+
+    (state.monitorAdvanced?advancedReadsView(d,readOpsHistory,{window:state.liveWindow,devices:devices.map((x,i)=>({...x,color:devColor(x.id,i)}))}):'')+
     '<details class="monitor-overview"><summary>Aggregate timeline · 120 seconds</summary>'+panel('Storage timeline','GB/s · aligned time windows · last 120 seconds',`<div class="panel-body">${livePlot(d)}<p class="chart-note">Aggregate uses simultaneous intervals across physical drives. It is not a sum of independent peaks.${state.paused?' Display frozen; the sampler continues running.':''}</p></div>`,badge(scope?'Receiving data':'Historical / stale',scope?'green':'amber'))+'</details>'+
     `<div class="two-col equal">${panel('Memory context','macOS unified memory · overlapping views are not added.',`<div class="panel-body"><div class="setting-line"><span>System memory used</span><strong>${fmt(fresh?sys.ram:null,1)} / ${fmt(d.ram_total,0)} GiB</strong></div><div class="memory-bar"><span style="width:${fresh&&d.ram_total?Math.min(100,(sys.ram||0)/d.ram_total*100):0}%"></span></div><div class="setting-line"><span>Engine RSS</span><strong>${fmt(fresh?sys.ram_engine:null,1)} GiB</strong></div><div class="setting-line"><span>Metal memory · system view</span><strong>${fmt(fresh?sys.gmem:null,1)} GiB</strong></div><div class="setting-line"><span>Current swap allocation</span><strong>${fmt(fresh?sys.swap:null,0)} MB</strong></div><p class="chart-note">Allocated swap alone does not show current swap traffic. Engine RSS and Metal memory can overlap.</p></div>`)}${panel('Telemetry health','Know when a measurement is unavailable.',`<div class="panel-body"><div class="setting-line"><span>Storage source</span><strong>${scope?'Fresh':'Unavailable or stale'}</strong></div><div class="setting-line"><span>System source</span><strong>${fresh?'Fresh':'Unavailable or stale'}</strong></div><div class="setting-line"><span>Engine detection</span><strong>${esc(d.health?.engine_detection||'Unknown')}</strong></div><div class="info-note" style="margin-top:15px">${p.unit==='chunks/s'?'The ds4 harness exposes response writes. This display labels them chunks/s; it cannot establish live tokenizer throughput.':'Process detection alone cannot establish token speed. The monitor waits for progress telemetry.'}</div></div>`)}</div>`);
   bindMonitorControls();
@@ -639,7 +767,7 @@ function renderActiveLive(){
   if(state.route==='ssds' && (document.activeElement?.matches('.ssd-toolbar select')||document.activeElement?.closest('.spotlight-panel')||$('#run-dialog').open))return;
   (state.route==='ssds'?renderSSDs:renderLive)();
 }
-setInterval(async()=>{if(document.hidden||(!['monitor','engram','ssds','topology'].includes(state.route)||(state.route==='monitor'&&state.monitorSource!=='hardware'))||state.paused||state.data?.mode==='reports'||pollBusy)return;pollBusy=true;try{state.data=await api('/data');state.connected=true;notice();renderActiveLive();updateChrome();}catch(e){state.connected=false;notice('Live connection lost. Previously collected charts are retained; current values are unavailable.');renderActiveLive();updateChrome();}finally{pollBusy=false;}},1000);
+setInterval(async()=>{if(document.hidden||(!['monitor','engram','ssds','topology'].includes(state.route)||(state.route==='monitor'&&state.monitorSource!=='hardware'))||state.paused||state.data?.mode==='reports'||pollBusy)return;pollBusy=true;try{state.data=await api('/data');captureReadOps(state.data);state.connected=true;notice();renderActiveLive();updateChrome();}catch(e){state.connected=false;notice('Live connection lost. Previously collected charts are retained; current values are unavailable.');renderActiveLive();updateChrome();}finally{pollBusy=false;}},1000);
 window.addEventListener('argodrive-folder',async e=>{if(!native||typeof e.detail!=='string')return;state.route='settings';location.hash='settings';renderSettings();$('#runs-path').value=e.detail;await saveSource(false);});
 navigate();refresh();
 
