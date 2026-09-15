@@ -6,7 +6,7 @@
 
 Open Live Hardware to check connected drives, memory and activity. Choose a folder of supported benchmark runs to inspect results and compare configurations. Report launch, drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues). Review any attachments for private paths and prompts before sharing.
 
-This is a monitoring and saved-run analysis preview, not an automatic optimizer. The app does not include model weights. Engine tests use the separate [complete V4.1 fork and reproduction recipe](https://github.com/argonautlabsai/ds4/tree/argonaut-v41-benchmark). The beta is ad-hoc signed and not notarized; see the testing guide before installing.
+This is a monitoring and saved-run analysis preview, not an automatic optimizer. The app does not include model weights. Engine tests use the separate [complete V4.1 fork and reproduction recipe](https://github.com/argonautlabsai/ds4-argodrive/tree/argonaut-v41-benchmark). The beta is ad-hoc signed and not notarized; see the testing guide before installing.
 
 
 **An expert-streaming optimiser for local AI.** ARGODRIVE's product goal is to
@@ -14,7 +14,7 @@ test your SSDs and find effective streaming settings for your model and workload
 then show the measured improvement in response time and generation speed.
 
 The V4.1 engine integration lives in the
-[Argonaut Argodrive DS4 fork](https://github.com/argonautlabsai/ds4/tree/argonaut-v41-benchmark).
+[Argonaut Argodrive DS4 fork](https://github.com/argonautlabsai/ds4-argodrive/tree/argonaut-v41-benchmark).
 
 The current Mac technical preview provides Overview, Live monitor, Runs, Compare
 and Diagnostics, plus dedicated SSD charts, saved Streaming configurations, persistent data-source settings and light/dark themes.
