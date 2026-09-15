@@ -10,11 +10,17 @@ Three models, two engines, one 128 GB laptop.
 
 ## What it has done
 
-| model | engine | storage | decode tok/s | prompt processing tok/s |
-|---|---|---|--:|--:|
-| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | 4 drives | 10.49 → **17.20** (1.6×) | 16.28 → **44.50** (2.7×) |
-| GLM-5.3, 744B | ds4 fork | 4 drives | 2.02 → **3.70** | — |
-| Kimi K3, 2.78T | deltafin fork | 4 drives | 0.41 → **1.10** | — |
+| model | engine | baseline | best measured | gain |
+|---|---|---|---|--:|
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 10.49 decode / 16.28 prefill | four drives: **17.20** / **44.50** | **1.6× / 2.7×** |
+| GLM-5.3, 744B | ds4 fork | our fork, one drive: 2.02 | four drives: **3.54** | **1.8×** |
+| Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
+
+Read the baselines carefully, because they are not the same kind of number. The V4.1 row
+compares against the **pinned upstream engine**; the GLM and K3 rows are our own software
+scaling from one drive to four, which is a storage result, not an engine comparison.
+GLM is 200-token generation; K3 is the public 17-token prompt, a median of three runs at
+every rung. V4.1 is 512-token prompt, 200 generated.
 
 All on an M5 Max, 128 GB. Each "before" is a measured control on the same machine in the
 same session — not a published figure from somewhere else. For V4.1 the control is the
