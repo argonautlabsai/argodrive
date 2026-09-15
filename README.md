@@ -1,12 +1,22 @@
 # ARGODRIVE
 
 **Layout, balancer and instruments for running mixture-of-experts models from SSDs.**
-When a model does not fit in RAM, every token waits on disk. ARGODRIVE decides where the
-expert weights live across your drives, splits each read across them in proportion to
-measured device speed, and shows you — in milliseconds, per drive, per phase — what the
-engine is actually waiting for.
+A 518 GB model on a 128 GB laptop: every token waits on disk, so what matters is not how
+much bandwidth you own but how long the slowest required read takes.
 
-Three models, two engines, one 128 GB laptop.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-dark.svg">
+  <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max. Prompt processing: upstream ds4 on the internal SSD 16.23 tok/s; our fork 28.04 on the same single drive (1.73x), 36.88 with one external (2.27x), 43.62 with two (2.69x). Steady decode: upstream 10.59; our fork 14.38 (1.36x), 16.05 (1.52x), 17.38 (1.64x).">
+</picture>
+
+**Read the first row of each panel carefully: that gain needs no extra hardware.** Upstream's
+prefill sweep reads every expert of every routed layer, but a 512-token chunk routes to only
+187 of 384 per layer — so it reads about twice what the model touches. Reading just the
+selected experts is worth **1.73× prompt processing on a single internal SSD**, with no
+replicas and no enclosures. Each drive after that shrinks every split read a little further.
+
+Every bar is a median of interleaved arms against the pinned upstream binary (`bd66c40`),
+with a **byte-identical output SHA-256** on all of them.
 
 ## What it has done
 
