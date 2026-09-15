@@ -43,13 +43,28 @@ and not notarized; see [Mac beta release instructions](docs/MAC-BETA-RELEASE.md)
 |---|---|---|
 | Kimi K3 | Deltafin | Recorded-run analysis and streaming evidence |
 | GLM 5.3 | Argonaut ds4 fork | Recorded runs, candidate profiles and qualified campaign evidence |
-| DeepSeek V4.1 Flash | Argodrive ds4 fork · Metal | Experimental three-drive profile and recorded qualification evidence |
+| DeepSeek V4.1 Flash | Argodrive ds4 fork · Metal | Experimental four-drive profile and recorded qualification evidence |
 
-The current V4.1 evidence is a single-machine qualification: 15.47 tok/s median
-over three pp512/tg512 repetitions on an M5 Max with the internal SSD plus two
-verified replicas. It is not a general speed guarantee, and the packaged app
-does not launch inference automatically. The GLM fork's replica settings are
-not available in the fresh upstream engine. See [V4.1 preparation and test
+The current V4.1 evidence is a single-machine qualification on an M5 Max with
+the internal SSD plus three verified replicas, split 10:6:6:4 by measured read
+speed, measured against the pinned upstream engine (`bd66c40`) on the internal
+SSD alone. Both sides produce the same output SHA-256, so the comparison is
+like-for-like rather than a storage-layout screen:
+
+| 512 prompt / 200 generated | upstream, one drive | Argodrive, four drives |
+| --- | ---: | ---: |
+| prompt processing | 16.28 tok/s | 44.50 tok/s (2.7x) |
+| generation | 10.04 tok/s | 16.27 tok/s (1.6x) |
+
+The prompt-processing gain is the 2026-09-15 prefill work: prefill had been
+reading every routed expert through the memory map of the primary file, so one
+drive carried it, and the layer-major sweep read all 384 experts of each layer
+where a 512-token prompt routes to 187. The generation gain is not that change;
+it comes from decode replica streaming and a larger expert cache.
+
+It is not a general speed guarantee, and the packaged app does not launch
+inference automatically. The GLM fork's replica settings are not available in
+the fresh upstream engine. See [V4.1 preparation and test
 procedure](docs/DEEPSEEK41.md).
 
 ## Product direction
@@ -109,6 +124,7 @@ the chart script in the benchmark package
 |---|---|---|
 | `monitor/` | `k3-diskscope.c` | 100 ms sampler of per-device read bytes and ops, RAM, CPU and GPU counters, to CSV. `cc -O2 -o k3-diskscope k3-diskscope.c -framework IOKit -framework CoreFoundation` |
 | `monitor/` | `k3-live.py` | local web dashboard on port 8130: live per-drive throughput, arm history with same-length deltas, by-layer barrier report from a per-read trace, CSV exports |
+| `monitor/` | `app.js` (Monitor → Advanced) | milliseconds per read, reads in flight, duty cycle and read size per drive, from IOKit completed-read statistics. Throughput charts cannot explain why another drive helps when the workload uses 19% of the available bandwidth; a split read completes when its slowest slice does, and this view shows that slice shrinking |
 | `monitor/` | `k3-memsample.sh` | one line per second of macOS memory truth (used / available / wired / swap) |
 | `harness/` | `k3-arm.sh`, `k3-arm-inner.sh`, `k3-measure.sh` | one measured arm: the configuration of record as environment, cold start enforced, swap guard, device map recorded, sampler and memory log per arm, text-identity check |
 | `harness/` | `k3-pressure.c` | memory-pressure step before an arm (records what preceded each measurement) |
