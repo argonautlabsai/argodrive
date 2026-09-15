@@ -9,14 +9,13 @@ much bandwidth you own but how long the slowest required read takes.
   <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max. Prompt processing: upstream ds4 on the internal SSD 16.23 tok/s; our fork 28.04 on the same single drive (1.73x), 36.88 with one external (2.27x), 43.62 with two (2.69x). Steady decode: upstream 10.59; our fork 14.38 (1.36x), 16.05 (1.52x), 17.38 (1.64x).">
 </picture>
 
-**Read the first row of each panel carefully: that gain needs no extra hardware.** Upstream's
-prefill sweep reads every expert of every routed layer, but a 512-token chunk routes to only
-187 of 384 per layer — so it reads about twice what the model touches. Reading just the
-selected experts is worth **1.73× prompt processing on a single internal SSD**, with no
-replicas and no enclosures. Each drive after that shrinks every split read a little further.
+**The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
+of every routed layer, but a 512-token chunk only routes to 187 of 384 — so it reads about
+twice what the model touches. Fixing that alone is worth **1.73× prompt processing on one
+internal SSD**, no replicas involved. Drives after that just shrink each split read further.
 
-Every bar is a median of interleaved arms against the pinned upstream binary (`bd66c40`),
-with a **byte-identical output SHA-256** on all of them.
+Every bar is a median of interleaved arms against pinned upstream `bd66c40`, all with the
+same output SHA-256.
 
 ## What it has done
 
