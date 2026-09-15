@@ -125,3 +125,41 @@ def dead_knobs(binary, env, prefixes=('DS4_',)):
 def live_knobs(binary, env, prefixes=('DS4_',)):
     blob = _binary_bytes(binary)
     return sorted(k for k in env if k.startswith(prefixes) and _present(blob, k))
+
+
+_LANDS = re.compile(rb'^ds4: Argodrive source\[(\d+)\] lands_last=(\d+) gap_ns=(\d+) reads=(\d+)$', re.M)
+
+
+def barrier_attribution(raw):
+    """Which source set the barrier, from the reader's exit report.
+
+    A split read completes when its slowest slice lands. The engine counts,
+    per source, how many split reads it landed last on and the total time it
+    trailed the next-to-last slice. That gap is what removing or
+    down-weighting the source would have saved. Returns {} for single-source
+    runs, which have no barrier and emit no such lines.
+    """
+    if isinstance(raw, str):
+        raw = raw.encode('utf-8', 'replace')
+    rows = _LANDS.findall(raw)
+    if not rows:
+        return {}
+    sources = {}
+    for i, ll, gap, reads in rows:
+        ll, gap, reads = int(ll), int(gap), int(reads)
+        sources[str(int(i))] = {
+            'lands_last': ll, 'reads': reads, 'gap_ns': gap,
+            'share': (ll / reads) if reads else None,
+            'mean_gap_ms': (gap / ll / 1e6) if ll else 0.0,
+        }
+    total_gap = sum(s['gap_ns'] for s in sources.values())
+    worst_id, worst = max(sources.items(), key=lambda kv: kv[1]['gap_ns'])
+    out = {'sources': sources, 'total_gap_ms': total_gap / 1e6, 'worst_source': worst_id}
+    if worst['lands_last'] and worst['reads']:
+        out['verdict'] = ('source %s landed last on %.0f%% of split reads, trailing by %.2f ms on average; '
+                          'it accounts for %.0f%% of all barrier wait'
+                          % (worst_id, 100 * worst['share'], worst['mean_gap_ms'],
+                             100 * worst['gap_ns'] / total_gap if total_gap else 0))
+    else:
+        out['verdict'] = 'no split read completed; nothing to attribute'
+    return out

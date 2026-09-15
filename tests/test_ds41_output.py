@@ -30,6 +30,16 @@ class OutputTests(unittest.TestCase):
   self.assertEqual(extract_generated(raw+footer,512),b'exact output')
   for bad in [footer.replace(b'failed=0',b'failed=1'),footer.replace(b'write_ok=1',b'write_ok=0'),footer.replace(b'records=2400',b'records=0')]:
    with self.assertRaises(ValueError):extract_generated(raw+bad,512)
+ def test_barrier_attribution_footer_accepted_alongside_bytes(self):
+  raw=b'ds4-bench: gen[ctx=512] decoded text: "exact output"\n'
+  footer=(b'ds4: Argodrive source[0] bytes=104175796224\n'
+          b'ds4: Argodrive source[1] bytes=49741037568\n'
+          b'ds4: Argodrive source[2] bytes=48931012608\n'
+          b'ds4: Argodrive source[0] lands_last=1203 gap_ns=402113000 reads=7360\n'
+          b'ds4: Argodrive source[1] lands_last=2044 gap_ns=1710884000 reads=7360\n'
+          b'ds4: Argodrive source[2] lands_last=4113 gap_ns=6012350000 reads=7360\n')
+  self.assertEqual(extract_generated(raw+footer,512),b'exact output')
+  with self.assertRaises(ValueError):extract_generated(raw+b'ds4: Argodrive source[0] lands_last=1 gap_ns=x reads=2\n',512)
  def test_unknown_tail_or_truncated_output_rejected(self):
   raw=b'ds4-bench: gen[ctx=512] decoded text: "test"\n'
   for bad in [raw+b'unknown\n',raw[:-2],raw+b'ds4: Metal memory at cleanup: runtime 0\nunknown\n']:

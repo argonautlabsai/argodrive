@@ -1,7 +1,7 @@
 import os, stat, sys, tempfile, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'monitor'))
-from engine_log import prefill_path, dead_knobs, live_knobs
+from engine_log import barrier_attribution, prefill_path, dead_knobs, live_knobs
 
 # The four shapes measured on 2026-09-15, verbatim from baseline.engine.txt.
 COMMON = (b'ds4: Argodrive primary expert descriptor F_NOCACHE=1; mmap/Engram descriptor unchanged\n'
@@ -76,6 +76,44 @@ class PrefillPathTests(unittest.TestCase):
 
     def test_accepts_str_input(self):
         self.assertEqual(prefill_path(SELECTIVE_ONE_SOURCE.decode())['path'], 'staged-selective')
+
+
+THREE_SOURCE_FOOTER = (
+    b'ds4: Argodrive source[0] bytes=104175796224\n'
+    b'ds4: Argodrive source[1] bytes=49741037568\n'
+    b'ds4: Argodrive source[2] bytes=48931012608\n'
+    b'ds4: Argodrive source[0] lands_last=1203 gap_ns=402113000 reads=7360\n'
+    b'ds4: Argodrive source[1] lands_last=2044 gap_ns=1710884000 reads=7360\n'
+    b'ds4: Argodrive source[2] lands_last=4113 gap_ns=6012350000 reads=7360\n')
+
+
+class BarrierAttributionTests(unittest.TestCase):
+    def test_single_source_run_has_nothing_to_attribute(self):
+        self.assertEqual(barrier_attribution(SELECTIVE_ONE_SOURCE), {})
+        self.assertEqual(barrier_attribution(b'ds4: Argodrive source[0] bytes=5\n'), {})
+
+    def test_three_sources_name_the_tail_and_its_cost(self):
+        a = barrier_attribution(THREE_SOURCE_FOOTER)
+        s = a['sources']
+        self.assertEqual(set(s), {'0', '1', '2'})
+        self.assertEqual(s['2']['lands_last'], 4113)
+        self.assertEqual(s['2']['reads'], 7360)
+        self.assertAlmostEqual(s['2']['share'], 4113 / 7360, places=6)
+        self.assertAlmostEqual(s['2']['mean_gap_ms'], 6012350000 / 4113 / 1e6, places=6)
+        self.assertEqual(a['worst_source'], '2')
+        self.assertAlmostEqual(a['total_gap_ms'], (402113000 + 1710884000 + 6012350000) / 1e6, places=6)
+        self.assertIn('source 2 landed last on 56%', a['verdict'])
+        self.assertIn('74% of all barrier wait', a['verdict'])
+
+    def test_share_and_mean_gap_handle_zero_counts(self):
+        a = barrier_attribution(b'ds4: Argodrive source[0] lands_last=0 gap_ns=0 reads=0\n'
+                                b'ds4: Argodrive source[1] lands_last=0 gap_ns=0 reads=0\n')
+        self.assertIsNone(a['sources']['0']['share'])
+        self.assertEqual(a['sources']['0']['mean_gap_ms'], 0.0)
+        self.assertIn('nothing to attribute', a['verdict'])
+
+    def test_accepts_str_input(self):
+        self.assertEqual(barrier_attribution(THREE_SOURCE_FOOTER.decode())['worst_source'], '2')
 
 
 class DeadKnobTests(unittest.TestCase):

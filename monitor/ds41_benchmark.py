@@ -15,7 +15,7 @@ import plistlib
 import subprocess
 import time
 
-from engine_log import dead_knobs, prefill_path
+from engine_log import barrier_attribution, dead_knobs, prefill_path
 from model_support import DS41_Q4_BYTES, DS41_Q4_SHA256, DS41_REVISION
 
 
@@ -113,6 +113,7 @@ def extract_generated(raw, prompt_tokens):
         raise ValueError('Cannot extract exact generated text from benchmark log.')
     known = re.compile(rb'(?:'
         rb'ds4: Argodrive source\[\d+\] bytes=\d+|'
+        rb'ds4: Argodrive source\[\d+\] lands_last=\d+ gap_ns=\d+ reads=\d+|'
         rb'ds4: Argodrive Engram source\[\d+\] bytes=\d+|'
         rb'ds4: Argodrive (?:resident_gate|precommit)_layers=\d+|'
         rb'ds4: Argodrive flat_read_batches=\d+|'
@@ -328,6 +329,10 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
                 if expected_marker not in raw or len(traffic)!=len(replicas)+1 or {int(i) for i,_ in traffic} != set(range(len(replicas)+1)) or any(int(n)<=0 for _,n in traffic):
                     raise ValueError('Requested replica reader did not report traffic on every source.')
                 result['expert_application_bytes_by_source'] = {str(int(i)):int(n) for i,n in traffic}
+                # Which source set the barrier, how often, and by how much. This is
+                # the instrument that turns "rebalance" into a specific weight change.
+                if attribution := barrier_attribution(raw):
+                    result['barrier_attribution'] = attribution
             if pf := re.search(rb'^ds4: Argodrive prefetch issued=(\d+) source_bytes=(\d+) copied_components=(\d+) copied_bytes=(\d+) busy=(\d+) late=(\d+) failed=(\d+)$', raw, re.M):
                 result['prefetch_staging'] = dict(zip(('issued_experts','source_bytes','copied_components','copied_bytes','busy_skips','not_ready_components','failed_components'), map(int,pf.groups())))
             output = extract_generated(raw, p['prompt_tokens'])
