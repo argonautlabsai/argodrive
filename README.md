@@ -12,28 +12,26 @@ Three models, two engines, one 128 GB laptop.
 
 | model | engine | baseline | best measured | gain |
 |---|---|---|---|--:|
-| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 10.49 decode / 16.28 prefill | four drives: **17.20** / **44.50** | **1.6× / 2.7×** |
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 16.23 prefill / 10.61 decode | one drive, no replicas: **28.04 / 14.38** · three drives: **43.62 / 17.38** | **1.70× / 2.69×** |
 | GLM-5.3, 744B | ds4 fork | our fork, one drive: 2.02 | four drives: **3.54** | **1.8×** |
 | Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
 
-Read the baselines carefully, because they are not the same kind of number. The V4.1 row
-compares against the **pinned upstream engine**; the GLM and K3 rows are our own software
-scaling from one drive to four, which is a storage result, not an engine comparison.
-GLM is 200-token generation; K3 is the public 17-token prompt, a median of three runs at
-every rung. V4.1 is 512-token prompt, 200 generated.
+All on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
+number. The V4.1 row compares against the **pinned upstream ds4 binary** (`bd66c40`),
+re-measured 2026-09-15 on the branch exactly as it ships, interleaved, with a **byte-identical
+output SHA-256 on every arm**. The GLM and K3 rows are our own software scaling from one drive
+to four, which is a storage result, not an engine comparison. GLM is 200-token generation;
+K3 is the public 17-token prompt, a median of three runs at every rung. V4.1 is a 512-token
+prompt with 200 generated, medians of interleaved pairs.
 
-All on an M5 Max, 128 GB. Each "before" is a measured control on the same machine in the
-same session — not a published figure from somewhere else. For V4.1 the control is the
-*pinned upstream ds4 binary* (`bd66c40`, single drive) producing a **byte-identical output
-hash** to the candidate, so the comparison is like-for-like; every one of the 73 arms behind
-that row carries the same hash. Medians of interleaved pairs, 512-token prompt, 200 generated.
-
-Run the candidate straight after a baseline arm — which pushes 300 GB through the internal
-SSD — and it loses about 9%. On a settled machine the same V4.1 config measures **49.17**
-prompt processing over four arms, which is **2.9×**. The table quotes the conservative pair.
+**The one-drive V4.1 column is the portable part, and it needs no replicas.** It is the
+selective expert read alone: a 512-token chunk routes to 187 of 384 experts per layer, so the
+stock layer-major sweep reads about twice what the model touches. Anyone with a single SSD
+gets that. The three-drive column adds weighted split reads across internal + two SN8100s at
+10:5:5 — that is what extra devices buy, and it is what the published branch supports.
 
 Time to first token on a 512-token prompt, which is the question everyone asks next:
-**31.5 s → 11.5 s**.
+**31.5 s → 18.3 s on one drive → 11.7 s on three.**
 
 ## What the instruments show
 
