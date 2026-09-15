@@ -12,7 +12,7 @@ Three models, two engines, one 128 GB laptop.
 
 | model | engine | storage | decode tok/s | prompt processing tok/s |
 |---|---|---|--:|--:|
-| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | 4 drives | 10.49 → **17.20** (1.6×) | 16.27 → **44.50** (2.7×) |
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | 4 drives | 10.49 → **17.20** (1.6×) | 16.28 → **44.50** (2.7×) |
 | GLM-5.3, 744B | ds4 fork | 4 drives | 2.02 → **3.70** | — |
 | Kimi K3, 2.78T | deltafin fork | 4 drives | 0.41 → **1.10** | — |
 
