@@ -12,14 +12,15 @@ Three models, two engines, one 128 GB laptop.
 
 | model | engine | baseline | best measured | gain |
 |---|---|---|---|--:|
-| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 16.23 prefill / 10.61 decode | one drive, no replicas: **28.04 / 14.38** · three drives: **43.62 / 17.38** | **1.70× / 2.69×** |
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 16.50 / 10.44 (vs our one-drive) · 16.23 / 10.61 (vs our three-drive) | one drive, no replicas: **28.04 / 14.38** · three drives: **43.62 / 17.38** | **1.70× / 2.69×** |
 | GLM-5.3, 744B | ds4 fork | our fork, one drive: 2.02 | four drives: **3.54** | **1.8×** |
 | Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
 
 All on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
 number. The V4.1 row compares against the **pinned upstream ds4 binary** (`bd66c40`),
-re-measured 2026-09-15 on the branch exactly as it ships, interleaved, with a **byte-identical
-output SHA-256 on every arm**. The GLM and K3 rows are our own software scaling from one drive
+re-measured 2026-09-15 on the branch exactly as it ships, with a **byte-identical output
+SHA-256 on every arm**. The one-drive and three-drive comparisons were separate interleaved
+sessions, each with its own upstream control, which is why two baselines are quoted. The GLM and K3 rows are our own software scaling from one drive
 to four, which is a storage result, not an engine comparison. GLM is 200-token generation;
 K3 is the public 17-token prompt, a median of three runs at every rung. V4.1 is a 512-token
 prompt with 200 generated, medians of interleaved pairs.
