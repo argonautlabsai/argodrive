@@ -145,8 +145,8 @@ _REMAP_EVERY_S = 5.0
 def _ensure_name(name: str) -> None:
     """Per-volume state for a volume that was not mounted at startup."""
     burst.setdefault(name, collections.deque(maxlen=BURST_RING))
-    rates.setdefault(name, collections.deque(maxlen=1200))
-    read_windows.setdefault(name, collections.deque(maxlen=1200))
+    rates.setdefault(name, collections.deque(maxlen=RING))
+    read_windows.setdefault(name, collections.deque(maxlen=RING))
     peaks.setdefault(name, 0.0)
     _bucket.setdefault(name, [0.0, 0.0, 0])
     _jitter.setdefault(name, 0)
@@ -197,14 +197,15 @@ CAP = {d["id"]: d["ceiling_gbps"] for d in DRIVE_INFO if d["ceiling_gbps"] is no
 # RECEIVED on the bridge member port are the M1's contribution; capacity is
 # the measured one-cable payload ceiling (4.7 GB/s, 2026-09-04).
 NET_DEVS = {}  # Network traffic is not physical SSD traffic.
-WINDOW = 120.0  # Matches the product timeline; samples keep their actual intervals.
+WINDOW = 300.0  # Matches the product timeline (longest chart window is 5 min); samples keep their actual intervals.
+RING = 3200     # 100 ms samples to cover WINDOW with margin; was 1200 (2 min) before the 5-minute window existed.
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SCOPE_CSV_BASE = os.environ.get("K3_SCOPE_CSV", f"/tmp/argodrive_scope_{PORT}_{os.getpid()}.csv")
 CSV = SCOPE_CSV_BASE
 
-rates: dict[str, collections.deque] = {v: collections.deque(maxlen=1200) for v in DEVS.values()}
-read_windows = {v: collections.deque(maxlen=1200) for v in DEVS.values()}
-read_windows['TOTAL'] = collections.deque(maxlen=1200)
+rates: dict[str, collections.deque] = {v: collections.deque(maxlen=RING) for v in DEVS.values()}
+read_windows = {v: collections.deque(maxlen=RING) for v in DEVS.values()}
+read_windows['TOTAL'] = collections.deque(maxlen=RING)
 sysv = {"cpu": 0.0, "ram": 0.0, "ram_avail": 128.0, "ram_mps": 0.0,
         "ram_engine": 0.0, "ram_system": 0.0, "swap": 0.0,
         "gpu": 0.0, "gmem": 0.0}
@@ -488,7 +489,7 @@ def phases_reader() -> None:
             time.sleep(1.0)
 peaks = {v: 0.0 for v in DEVS.values()}
 peaks["TOTAL"] = 0.0
-total_rates = collections.deque(maxlen=1200)
+total_rates = collections.deque(maxlen=RING)
 lock = threading.Lock()
 
 # 10 ms burst ring (K3-MONITOR-10MS-UPGRADE-SPEC). The sampler now ticks at
