@@ -26,13 +26,20 @@ def main():
     parser.add_argument('--python', default=str(BUILD/'packaging-py312/bin/python'), help='Python with PyInstaller 6.22.2 installed')
     parser.add_argument('--output', default=str(DIST), help='Output directory for the app and ZIP')
     parser.add_argument('--sign', help='Developer ID Application identity; omit for an ad-hoc technical preview')
+    parser.add_argument('--sign-local', help='Apple Development identity for builds that stay on this Mac; keeps macOS privacy grants across rebuilds')
     args = parser.parse_args()
     # Prefer a matched compiler/SDK from Xcode without changing xcode-select.
     developer = Path('/Applications/Xcode.app/Contents/Developer')
     if developer.is_dir(): os.environ.setdefault('DEVELOPER_DIR', str(developer))
-    identity = args.sign or '-'
+    if args.sign and args.sign_local: parser.error('--sign and --sign-local are mutually exclusive')
     if args.sign and not args.sign.startswith('Developer ID Application:'):
         parser.error('--sign must be a Developer ID Application identity, not an Apple Development identity')
+    # An ad-hoc signature is a fresh code hash on every build, so macOS treats each rebuild as
+    # a new app and asks for Documents access again at every launch. A local certificate gives
+    # the bundle a stable identity for those grants without claiming to be a distributable build.
+    if args.sign_local and not args.sign_local.startswith('Apple Development:'):
+        parser.error('--sign-local takes an Apple Development identity; it is for builds that stay on this Mac')
+    identity = args.sign or args.sign_local or '-'
     output = Path(args.output).resolve()
     BUILD.mkdir(exist_ok=True); output.mkdir(parents=True, exist_ok=True)
     app = output/'ARGODRIVE.app'
@@ -52,7 +59,7 @@ def main():
     # addition to the legacy GLM harness.  It is imported lazily by the worker,
     # so keep it in frozen builds explicitly.
     freeze += ['--hidden-import', 'ds41_benchmark']
-    if args.sign: freeze += ['--codesign-identity',args.sign]
+    if identity != '-': freeze += ['--codesign-identity',identity]
     freeze += [ROOT/'monitor/k3-live.py']
     run(freeze, env={**os.environ,'PYINSTALLER_CONFIG_DIR':str(BUILD/'pyinstaller-cache')})
     shutil.copytree(BUILD/'frozen/argodrive-server',resources/'backend',symlinks=True)
@@ -80,7 +87,7 @@ def main():
     pyinstaller_license = subprocess.check_output([args.python,'-c',"import importlib.metadata as m;d=m.distribution('pyinstaller');print(next(d.locate_file(f) for f in d.files if str(f).endswith('/COPYING.txt')))"],text=True).strip()
     shutil.copy2(pyinstaller_license, resources/'PyInstaller-COPYING.txt')
     import_meta = subprocess.check_output([args.python,'-c',"import importlib.metadata as m,json;print(json.dumps({n:m.version(n) for n in ['pyinstaller','pyinstaller-hooks-contrib','macholib','altgraph','packaging']}))"],text=True)
-    manifest = {'version':VERSION,'architecture':'arm64','minimum_macos':'14.0','signing':'developer-id' if args.sign else 'ad-hoc','notarized':False,
+    manifest = {'version':VERSION,'architecture':'arm64','minimum_macos':'14.0','signing':'developer-id' if args.sign else 'local-development' if args.sign_local else 'ad-hoc','notarized':False,
                 'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                 'source_dirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip()),
                 'build_dependencies':json.loads(import_meta),'python':subprocess.check_output([args.python,'--version'],text=True).strip()}
