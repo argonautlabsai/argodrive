@@ -29,6 +29,16 @@ def ds41_fork_profile(model_path, replica_paths):
         'DS4_ARGODRIVE_RESIDENT_GATE': '1',
         'DS4_ARGODRIVE_ENGRAM_READERS': '8',
         'DS4_ARGODRIVE_PHASES': '1',
+        # Prefill staging. These are what the 2026-09-15 prompt-processing result
+        # measures, and without them a test reproduces the unfixed layer-major
+        # sweep instead. SELECTIVE needs no replicas at all: it reads only the
+        # experts the chunk's router selected (187 of 384 at 512 tokens), which
+        # is the portable half of the gain.
+        'DS4_ARGODRIVE_PREFILL_SPLIT': '1',
+        'DS4_ARGODRIVE_PREFILL_SELECTIVE': '1',
+        'DS4_ARGODRIVE_PREFILL_AHEAD': '1',
+        'DS4_ARGODRIVE_PREFILL_LANES': '8',
+        'DS4_ARGODRIVE_PREFILL_PIPE': '256',
     }
     errors = []
     if any(',' in str(p) or '*' in str(p) for p in replica_paths):
@@ -42,6 +52,10 @@ def ds41_fork_profile(model_path, replica_paths):
             'model_path': str(model_path), 'replica_paths': [str(p) for p in replica_paths],
             'environment': env, 'errors': errors, 'cache_policy': 'Automatic expert cache; no reserve expansion',
             'engram_policy': 'Primary SSD only; eight parallel whole-row readers',
+            'prefill_policy': ('Staged prefill reading only the experts the chunk routed to. '
+                               'Measured 2026-09-15 against pinned upstream bd66c40, identical output hash: '
+                               '16.50 to 28.04 tok/s prompt processing on one drive with no replicas, '
+                               '16.23 to 43.62 on three.'),
             'expert_policy': ('256 KiB split reads; primary weight 2, each enclosure weight 1'
                               if replica_paths else 'Primary SSD expert reads'),
             'validation_required': ['Engine build capabilities', 'Full model and replica SHA-256',
