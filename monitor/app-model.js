@@ -53,13 +53,22 @@ export function sharedReadBarScale(devices=[],traces={},caps={}) {
   return {end,ceiling:Math.max(16,Math.ceil(max*1.05/4)*4)};
 }
 
-// The Monitor per-drive cards use one fixed comparison domain. Aggregate
-// charts retain their own scale because they represent multiple drives.
+// The Monitor per-drive cards share ONE axis so drives stay comparable, and that
+// axis fits the window: 10% above the busiest drive's average, never below any
+// drive's peak so nothing clips (KP, 2026-09-15). MONITOR_READ_SCALE_GBPS is the
+// floor used when no drive has reported a window yet (idle machine, first tick).
 export const MONITOR_READ_SCALE_GBPS = 16;
+export const MONITOR_READ_HEADROOM = 1.10;
 export function monitorReadBarScale(devices=[],traces={},seconds=20,end=null) {
   const points=devices.flatMap(d=>traces[d.id]||[]);
   const last=finite(end)?end:Math.max(0,...points.filter(p=>finite(p[0])).map(p=>p[0]));
-  return {end:last,ceiling:MONITOR_READ_SCALE_GBPS,mode:'shared'};
+  let ceiling=0;
+  for(const d of devices){
+    const s=readWindowStats(traces[d.id]||[],seconds,last);
+    if(!s.points.length) continue;
+    ceiling=Math.max(ceiling,(s.mean||0)*MONITOR_READ_HEADROOM,s.peak||0);
+  }
+  return {end:last,ceiling:ceiling>0?Math.max(4,Math.ceil(ceiling)):MONITOR_READ_SCALE_GBPS,mode:'shared'};
 }
 
 export function readWindowStats(points=[],seconds=120,end=null) {

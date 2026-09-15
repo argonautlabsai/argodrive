@@ -191,7 +191,7 @@ def swap_used_mb():
     return float(found[1]) * {'K':1/1024, 'M':1, 'G':1024}[found[2]]
 
 
-def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=2, sampler_binary=None, devices=None, experimental_env=None, max_swap_growth_mb=None, lock_held=False):
+def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=2, sampler_binary=None, devices=None, experimental_env=None, max_swap_growth_mb=None, replica_weights=None, lock_held=False):
     if not 30 <= timeout <= 1800:
         raise ValueError('Timeout must be 30–1800 seconds.')
     if max_swap_growth_mb is not None and not 0 < max_swap_growth_mb <= 1024:
@@ -201,6 +201,10 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
         raise ValueError('Choose up to two different replica paths.')
     if any(any(c in x for c in ',*\n\r') for x in replicas) or not 1 <= primary_weight <= 100:
         raise ValueError('Invalid replica path grammar or primary weight.')
+    if replica_weights is not None:
+        replica_weights = [int(w) for w in replica_weights]
+        if len(replica_weights) != len(replicas) or any(not 1 <= w <= 100 for w in replica_weights):
+            raise ValueError('replica_weights must give one weight in 1..100 per replica.')
     if replicas and not verification_receipt:
         raise ValueError('Replica runs require completed full-file verification receipts.')
     devices = devices or {}
@@ -225,7 +229,7 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
     if sampler_binary and (not Path(sampler_binary).is_file() or not devices or any(not re.fullmatch(r'disk[0-9]+', d) for d in devices.values())):
         raise ValueError('Sampler requires a verified binary and physical whole-disk map.')
     p = {**p, 'sampler':str(sampler_binary) if sampler_binary else None, 'physical_devices':devices, 'method':'expert split reads' if replicas else 'single-source',
-         'replica_streaming':bool(replicas), 'replicas':replicas, 'primary_weight':primary_weight,
+         'replica_streaming':bool(replicas), 'replicas':replicas, 'primary_weight':primary_weight, 'replica_weights':replica_weights,
          'verification_receipt':str(verification_receipt) if verification_receipt else None,
          'experimental_environment':experimental_env}
     p['max_swap_growth_mb'] = max_swap_growth_mb
@@ -264,7 +268,8 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
         env = {k:v for k,v in os.environ.items() if not k.startswith(('DS4_', 'GLM_', 'K3_'))}
         env.update(experimental_env)
         if replicas:
-            env['DS4_ARGODRIVE_REPLICAS'] = ','.join(x+'*1' for x in replicas)
+            weights = replica_weights or [1]*len(replicas)
+            env['DS4_ARGODRIVE_REPLICAS'] = ','.join(x+'*'+str(w) for x, w in zip(replicas, weights))
             env['DS4_ARGODRIVE_PRIMARY_WEIGHT'] = str(primary_weight)
         # A knob the binary never reads measures nothing. Record it loudly rather
         # than refuse: a stored profile may carry settings for another build.

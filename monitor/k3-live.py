@@ -1025,6 +1025,81 @@ def _arm_settings(text: str) -> dict:
     return s
 
 
+def _enrich_ds41_row(row: dict, arm_dir: str, j: dict) -> None:
+    """The columns a reviewer needs to read a DeepSeek arm without opening it.
+
+    Every DeepSeek arm is named `baseline` by the harness, so identity comes
+    from the block directory: `variant` strips the repeat suffix (p3-up-1 ->
+    p3-up, w1077-A1 -> w1077-A) so repeats group themselves. Settings come from
+    plan.json (the BENCH_RESULT record never carried them, which is why
+    `overrides` read as a dash on every row). Anything the engine does not
+    report -- V4.1 prints no cache hit-rate, and these arms write no memory
+    log -- stays None rather than a misleading 0.000.
+    """
+    block = os.path.basename(arm_dir)
+    for rx in (r'^(.*-[AB])([0-9]+)$', r'^(.*)-([0-9]+)$', r'^(.*)-([ab])$'):
+        if (m := re.match(rx, block)):
+            row['variant'], row['rep'] = m.group(1), m.group(2)
+            break
+    else:
+        row['variant'], row['rep'] = block, '1'
+    row['prefill_tok_s'] = j.get('prefill_tok_s')
+    row['output_sha'] = (j.get('output_sha256') or '')[:16] or None
+    try:
+        with open(os.path.join(arm_dir, 'plan.json')) as fh:
+            plan = json.load(fh)
+    except (OSError, ValueError):
+        plan = {}
+    env = plan.get('experimental_environment') or {}
+    argv = plan.get('argv') or []
+    idxs = [i for i, a in enumerate(argv) if a == '--ssd-streaming-cache-experts']
+    cache_req = argv[idxs[-1] + 1] if idxs and idxs[-1] + 1 < len(argv) else None   # last wins in the engine
+    reps = plan.get('replicas') or []
+    rw = plan.get('replica_weights') or ([1] * len(reps) if reps else [])
+    pw = plan.get('primary_weight')
+    weights = ':'.join(str(w) for w in [pw, *rw]) if reps and pw is not None else ('single' if plan else None)
+    knobs = ' '.join(f"{k.removeprefix('DS4_ARGODRIVE_')}={v}" for k, v in sorted(env.items()) if k.startswith('DS4_ARGODRIVE_'))
+    parts = [p for p in (f'weights={weights}' if weights else '', f'cache={cache_req}' if cache_req else '',
+                         'sampler=on' if plan.get('sampler') else 'sampler=off', knobs) if p]
+    row['overrides'] = ' '.join(parts) if parts else (row.get('overrides') or '—')
+    row['weights'], row['cache_experts'] = weights, cache_req
+    row['notes'] = '; '.join(plan.get('notes') or []) or None
+    # Per-source bytes, named by volume: the aggregate hides a missing drive or a
+    # split that did not hold. /Volumes/Green/<model>/<file> -> "green".
+    names = ['primary'] + [os.path.basename(os.path.dirname(os.path.dirname(r))) for r in reps]
+    for k, b in (j.get('expert_application_bytes_by_source') or {}).items():
+        i = int(k)
+        row['gb_' + (names[i] if i < len(names) else f'src{i}').lower()] = round(int(b) / 1e9, 1)
+    ba = j.get('barrier_attribution') or {}
+    if ba.get('sources'):
+        w = str(ba.get('worst_source')); s = ba['sources'].get(w, {})
+        nm = names[int(w)] if w.isdigit() and int(w) < len(names) else f'src{w}'
+        row['lands_last'] = f"{nm} {round(100 * (s.get('share') or 0))}%"
+    try:
+        with open(os.path.join(arm_dir, 'baseline.engine.txt'), 'rb') as fh:
+            if (m := re.search(rb'expert cache ([0-9.]+) GiB', fh.read())):
+                row['cache_gib'] = float(m.group(1))
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(arm_dir, 'swap-samples.json')) as fh:
+            vals = [s.get('used_mb') for s in json.load(fh) if isinstance(s, dict) and s.get('used_mb') is not None]
+        row['swap_mb'] = round(max(vals)) if vals else None
+    except (OSError, ValueError):
+        row['swap_mb'] = None
+    try:
+        with open(os.path.join(arm_dir, 'run.json')) as fh:
+            state = json.load(fh)
+        ok = state.get('status') == 'complete' and bool(state.get('result'))
+        if state.get('dead_knobs'):
+            row['dead_knobs'] = ' '.join(state['dead_knobs'])
+    except (OSError, ValueError):
+        ok = True
+    row['valid'] = bool(ok and not row.get('incomplete'))
+    if not ok:
+        row['incomplete'] = True
+
+
 def _parse_arm(path: str) -> dict | None:
     """One arm log -> one pivot row. Never raises: a half-written log from a
     killed block must degrade to a partial row, not blank the whole tab."""
@@ -1099,16 +1174,54 @@ def _parse_arm(path: str) -> dict | None:
             import math
             if not math.isfinite(rate) or rate <= 0:
                 raise ValueError('Invalid engine timing')
+            # Response-shaped figures from the engine's own timers. ds4-bench does
+            # not MEASURE time to first token (the GLM harness does, as
+            # first_byte_s), so `first_token_s` stays None by policy -- see
+            # test_benchmark_import_retains_actual_counts_without_inventing_ttft.
+            # But prefill wall = prompt tokens / reported prefill rate and the
+            # first decode step is measured, so their sum is an identity on the
+            # engine's numbers, not an estimate. It goes out under a name that
+            # says so: ttft_s_derived. It is the number a prefill claim rests on
+            # and every DeepSeek row exported it as 0.000.
+            pre_s = j['prompt_tokens'] / float(j['prefill_tok_s'])
+            gen_s = n / float(j['generation_tok_s'])
+            first_s = pre_s + float(j.get('first_decode_step_ms') or 0) / 1000
+            elapsed = pre_s + gen_s
+            if not all(math.isfinite(v) and v > 0 for v in (pre_s, gen_s, elapsed)):
+                raise ValueError('Invalid engine timing')
             row.update(started=j.get('started_at', row.get('started')), model=os.path.basename(j['model_path']).removesuffix('.gguf'),
                        tokens=n, generated=n, ds4=True, tok_s_steady=rate,
-                       tok_s=None, elapsed=None, first_token_s=None,
+                       tok_s=round(n / elapsed, 4), elapsed=round(elapsed, 2), first_token_s=None,
+                       ttft_s_derived=round(first_s, 2), encode_share_pct=round(100 * pre_s / elapsed, 1),
                        rate_source=j['rate_source'], prompt_hash=j['prompt_sha256'],
                        comparison_context=(str(j['context']), 'raw-bench', 'greedy-non-eos', 'none'),
                        summary={'ds4_gen_tps':j['generation_tok_s'], 'ds4_prefill_tps':j['prefill_tok_s'],
                                 'prompt_tokens':j['prompt_tokens'], 'valid':'ok', 'rc':0},
                        publication_ready=False)
+            _enrich_ds41_row(row, os.path.dirname(path), j)
         except (KeyError, ValueError, TypeError):
             row['incomplete'] = True
+    elif re.search(r'^ARGODRIVE_BENCH_START ', text, re.M):
+        # A DeepSeek arm that started but never wrote a result: the harness
+        # stopped it (swap guard, engine exit, extraction failure). Carry the
+        # reason so a reviewer sees "stopped: swap growth exceeded" instead of
+        # a row of zeros they have to spot by eye.
+        row['incomplete'] = True
+        row['valid'] = False
+        row['ds4'] = True
+        try:
+            with open(os.path.join(os.path.dirname(path), 'run.json')) as fh:
+                st = json.load(fh)
+            row['notes'] = ('stopped: ' + str(st.get('error') or st.get('status') or 'no result'))[:160]
+        except (OSError, ValueError):
+            row['notes'] = 'stopped: no run.json'
+        block = os.path.basename(os.path.dirname(path))
+        for rx in (r'^(.*-[AB])([0-9]+)$', r'^(.*)-([0-9]+)$', r'^(.*)-([ab])$'):
+            if (m := re.match(rx, block)):
+                row['variant'], row['rep'] = m.group(1), m.group(2)
+                break
+        else:
+            row['variant'], row['rep'] = block, '1'
     elif (dm := _RE_DS4_SUMMARY.search(text)):
         # ds4 harness (GLM project): one JSON summary line per arm.
         try:
@@ -1500,9 +1613,11 @@ def stats_payload() -> bytes:
 
 # Measurement columns emitted before the settings families, in this order. Any
 # key present on a row but not listed here still appears — see stats_csv.
-_CSV_LEAD = ["block", "arm", "ran", "tokens", "generated", "incomplete", "is_base",
-             "tok_s", "tok_s_steady", "first_token_s", "encode_share_pct", "wall_s",
-             "delta_pct", "s_tok", "elapsed", "chunks", "drafts", "accept",
+_CSV_LEAD = ["block", "variant", "rep", "arm", "ran", "valid", "tokens", "generated", "incomplete", "is_base",
+             "tok_s", "tok_s_steady", "prefill_tok_s", "first_token_s", "ttft_s_derived", "encode_share_pct", "wall_s",
+             "delta_pct", "output_sha", "weights", "cache_experts", "cache_gib", "lands_last",
+             "gb_primary", "gb_green", "gb_white", "gb_blue", "swap_mb", "dead_knobs", "notes",
+             "s_tok", "elapsed", "chunks", "drafts", "accept",
              "layer_passes", "prompt", "overrides", "mirror",
              "feat_mirror", "feat_retain", "feat_summer"]
 
