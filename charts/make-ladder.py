@@ -8,9 +8,10 @@ def chart(data, dark=False):
     muted   = '#9aa1b2' if dark else '#5d6478'
     grid    = '#2b3040' if dark else '#e3e6ee'
     bg      = '#0d1017' if dark else '#ffffff'
-    base    = '#7c8496' if dark else '#98a0b3'
-    accents = ['#7b6ef0', '#5b8def', '#2bb3a3']
-    W, panel_h, pad_l, pad_r, top = 1000, 196, 196, 26, 56
+    base    = '#6b7280' if dark else '#b4bac7'
+    track   = '#1a1f2b' if dark else '#f1f3f7'
+    accents = ['#8fa9ff', '#5b86f5', '#2f6beb'] if dark else ['#8aa4f7', '#4f7df3', '#1b5bea']
+    W, panel_h, pad_l, pad_r, top = 1000, 204, 196, 26, 56
     rows = []
     for pi, (metric, unit) in enumerate([('prefill', 'prompt processing tok/s'), ('decode', 'steady decode tok/s')]):
         bars = [('Upstream ds4 · internal only', data[metric]['upstream'], base, True)]
@@ -32,22 +33,22 @@ def chart(data, dark=False):
     y = top
     for metric, unit, bars in rows:
         mx = max(v for _, v, _, _ in bars) * 1.34
+        track_w = W - pad_l - pad_r - 132
         out.append(f'<text x="{pad_l}" y="{y+22}" font-size="13.5" font-weight="700" fill="{fg}">{unit}</text>')
         by = y + 38
         for label, v, colour, is_base in bars:
             bw = (W - pad_l - pad_r - 132) * (v / mx)
             gain = v / bars[0][1]
-            out.append(f'<text x="{pad_l-12}" y="{by+16}" font-size="12" text-anchor="end" '
+            out.append(f'<text x="{pad_l-12}" y="{by+16.5}" font-size="12" text-anchor="end" '
                        f'fill="{muted if is_base else fg}">{label}</text>')
-            out.append(f'<rect x="{pad_l}" y="{by}" width="{bw:.1f}" height="23" rx="4" fill="{colour}"'
-                       f'{"" if is_base else ""}/>')
-            out.append(f'<text x="{pad_l+bw+9:.1f}" y="{by+16}" font-size="13" font-weight="700" '
+            out.append(f'<rect x="{pad_l}" y="{by}" width="{track_w:.1f}" height="24" rx="12" fill="{track}"/>')
+            out.append(f'<rect x="{pad_l}" y="{by}" width="{max(bw, 24):.1f}" height="24" rx="12" fill="{colour}"/>')
+            out.append(f'<text x="{pad_l+bw+10:.1f}" y="{by+16.5}" font-size="13" font-weight="700" '
                        f'fill="{fg}">{v:.2f}</text>')
             if not is_base:
-                out.append(f'<text x="{pad_l+bw+58:.1f}" y="{by+16}" font-size="12.5" font-weight="600" '
+                out.append(f'<text x="{pad_l+bw+59:.1f}" y="{by+16.5}" font-size="12.5" font-weight="600" '
                            f'fill="{colour}">{gain:.2f}×</text>')
-            by += 34
-        out.append(f'<line x1="{pad_l}" y1="{y+32}" x2="{pad_l}" y2="{by-6}" stroke="{grid}" stroke-width="1"/>')
+            by += 36
         y += panel_h
     out.append(f'<text x="{pad_l}" y="{H-16}" font-size="11.5" fill="{muted}">'
                f'Upstream control: pinned ds4 bd66c40 on the internal SSD, median of four interleaved arms. '

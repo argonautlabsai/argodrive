@@ -1,40 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 494" width="1000" height="494" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect width="1000" height="494" fill="#0d1017"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 510" width="1000" height="510" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="1000" height="510" fill="#0d1017"/>
 <text x="196" y="30" font-size="18" font-weight="700" fill="#e6e8ee">DeepSeek V4.1-Flash Q4 (518 GB) streamed from SSD — M5 Max, 128 GB</text>
 <text x="196" y="48" font-size="12.5" fill="#9aa1b2">512-token prompt, 200 generated · every arm byte-identical output SHA-256 · higher is better</text>
 <text x="196" y="78" font-size="13.5" font-weight="700" fill="#e6e8ee">prompt processing tok/s</text>
-<text x="184" y="110" font-size="12" text-anchor="end" fill="#9aa1b2">Upstream ds4 · internal only</text>
-<rect x="196" y="94" width="179.4" height="23" rx="4" fill="#7c8496"/>
-<text x="384.4" y="110" font-size="13" font-weight="700" fill="#e6e8ee">16.23</text>
-<text x="184" y="144" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · internal only</text>
-<rect x="196" y="128" width="309.9" height="23" rx="4" fill="#7b6ef0"/>
-<text x="514.9" y="144" font-size="13" font-weight="700" fill="#e6e8ee">28.04</text>
-<text x="563.9" y="144" font-size="12.5" font-weight="600" fill="#7b6ef0">1.73×</text>
-<text x="184" y="178" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +1 external</text>
-<rect x="196" y="162" width="407.6" height="23" rx="4" fill="#5b8def"/>
-<text x="612.6" y="178" font-size="13" font-weight="700" fill="#e6e8ee">36.88</text>
-<text x="661.6" y="178" font-size="12.5" font-weight="600" fill="#5b8def">2.27×</text>
-<text x="184" y="212" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +2 external</text>
-<rect x="196" y="196" width="482.1" height="23" rx="4" fill="#2bb3a3"/>
-<text x="687.1" y="212" font-size="13" font-weight="700" fill="#e6e8ee">43.62</text>
-<text x="736.1" y="212" font-size="12.5" font-weight="600" fill="#2bb3a3">2.69×</text>
-<line x1="196" y1="88" x2="196" y2="224" stroke="#2b3040" stroke-width="1"/>
-<text x="196" y="274" font-size="13.5" font-weight="700" fill="#e6e8ee">steady decode tok/s</text>
-<text x="184" y="306" font-size="12" text-anchor="end" fill="#9aa1b2">Upstream ds4 · internal only</text>
-<rect x="196" y="290" width="293.7" height="23" rx="4" fill="#7c8496"/>
-<text x="498.7" y="306" font-size="13" font-weight="700" fill="#e6e8ee">10.59</text>
-<text x="184" y="340" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · internal only</text>
-<rect x="196" y="324" width="398.9" height="23" rx="4" fill="#7b6ef0"/>
-<text x="603.9" y="340" font-size="13" font-weight="700" fill="#e6e8ee">14.38</text>
-<text x="652.9" y="340" font-size="12.5" font-weight="600" fill="#7b6ef0">1.36×</text>
-<text x="184" y="374" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +1 external</text>
-<rect x="196" y="358" width="445.2" height="23" rx="4" fill="#5b8def"/>
-<text x="650.2" y="374" font-size="13" font-weight="700" fill="#e6e8ee">16.05</text>
-<text x="699.2" y="374" font-size="12.5" font-weight="600" fill="#5b8def">1.52×</text>
-<text x="184" y="408" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +2 external</text>
-<rect x="196" y="392" width="482.1" height="23" rx="4" fill="#2bb3a3"/>
-<text x="687.1" y="408" font-size="13" font-weight="700" fill="#e6e8ee">17.38</text>
-<text x="736.1" y="408" font-size="12.5" font-weight="600" fill="#2bb3a3">1.64×</text>
-<line x1="196" y1="284" x2="196" y2="420" stroke="#2b3040" stroke-width="1"/>
-<text x="196" y="478" font-size="11.5" fill="#9aa1b2">Upstream control: pinned ds4 bd66c40 on the internal SSD, median of four interleaved arms. “+1 / +2 external” add byte-identical replicas of the 518 GB file.</text>
+<text x="184" y="110.5" font-size="12" text-anchor="end" fill="#9aa1b2">Upstream ds4 · internal only</text>
+<rect x="196" y="94" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="94" width="179.4" height="24" rx="12" fill="#6b7280"/>
+<text x="385.4" y="110.5" font-size="13" font-weight="700" fill="#e6e8ee">16.23</text>
+<text x="184" y="146.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · internal only</text>
+<rect x="196" y="130" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="130" width="309.9" height="24" rx="12" fill="#8fa9ff"/>
+<text x="515.9" y="146.5" font-size="13" font-weight="700" fill="#e6e8ee">28.04</text>
+<text x="564.9" y="146.5" font-size="12.5" font-weight="600" fill="#8fa9ff">1.73×</text>
+<text x="184" y="182.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +1 external</text>
+<rect x="196" y="166" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="166" width="407.6" height="24" rx="12" fill="#5b86f5"/>
+<text x="613.6" y="182.5" font-size="13" font-weight="700" fill="#e6e8ee">36.88</text>
+<text x="662.6" y="182.5" font-size="12.5" font-weight="600" fill="#5b86f5">2.27×</text>
+<text x="184" y="218.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +2 external</text>
+<rect x="196" y="202" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="202" width="482.1" height="24" rx="12" fill="#2f6beb"/>
+<text x="688.1" y="218.5" font-size="13" font-weight="700" fill="#e6e8ee">43.62</text>
+<text x="737.1" y="218.5" font-size="12.5" font-weight="600" fill="#2f6beb">2.69×</text>
+<text x="196" y="282" font-size="13.5" font-weight="700" fill="#e6e8ee">steady decode tok/s</text>
+<text x="184" y="314.5" font-size="12" text-anchor="end" fill="#9aa1b2">Upstream ds4 · internal only</text>
+<rect x="196" y="298" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="298" width="293.7" height="24" rx="12" fill="#6b7280"/>
+<text x="499.7" y="314.5" font-size="13" font-weight="700" fill="#e6e8ee">10.59</text>
+<text x="184" y="350.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · internal only</text>
+<rect x="196" y="334" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="334" width="398.9" height="24" rx="12" fill="#8fa9ff"/>
+<text x="604.9" y="350.5" font-size="13" font-weight="700" fill="#e6e8ee">14.38</text>
+<text x="653.9" y="350.5" font-size="12.5" font-weight="600" fill="#8fa9ff">1.36×</text>
+<text x="184" y="386.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +1 external</text>
+<rect x="196" y="370" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="370" width="445.2" height="24" rx="12" fill="#5b86f5"/>
+<text x="651.2" y="386.5" font-size="13" font-weight="700" fill="#e6e8ee">16.05</text>
+<text x="700.2" y="386.5" font-size="12.5" font-weight="600" fill="#5b86f5">1.52×</text>
+<text x="184" y="422.5" font-size="12" text-anchor="end" fill="#e6e8ee">Our fork · +2 external</text>
+<rect x="196" y="406" width="646.0" height="24" rx="12" fill="#1a1f2b"/>
+<rect x="196" y="406" width="482.1" height="24" rx="12" fill="#2f6beb"/>
+<text x="688.1" y="422.5" font-size="13" font-weight="700" fill="#e6e8ee">17.38</text>
+<text x="737.1" y="422.5" font-size="12.5" font-weight="600" fill="#2f6beb">1.64×</text>
+<text x="196" y="494" font-size="11.5" fill="#9aa1b2">Upstream control: pinned ds4 bd66c40 on the internal SSD, median of four interleaved arms. “+1 / +2 external” add byte-identical replicas of the 518 GB file.</text>
 </svg>
