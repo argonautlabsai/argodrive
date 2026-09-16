@@ -28,6 +28,7 @@ def ds41_fork_profile(model_path, replica_paths):
         'DS4_ARGODRIVE_PRIMARY_NOCACHE': '1',
         'DS4_ARGODRIVE_RESIDENT_GATE': '1',
         'DS4_ARGODRIVE_ENGRAM_READERS': '8',
+        'DS4_ARGODRIVE_ENGRAM_ASYNC': '1',  # Engram rows read on a concurrent queue, joined at layer 1: +2% decode over 4 interleaved pairs (2026-09-16)
         'DS4_ARGODRIVE_PHASES': '1',
         # Prefill staging. These are what the 2026-09-15 prompt-processing result
         # measures, and without them a test reproduces the unfixed layer-major

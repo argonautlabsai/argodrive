@@ -217,6 +217,7 @@ def run(p, timeout=1800, replicas=(), verification_receipt=None, primary_weight=
                'DS4_METAL_CB_TIMES', 'DS4_METAL_GPU_BUSY_PROFILE',
                'DS4_METAL_DISABLE_STREAMING_EXPERT_READAHEAD',
                'DS4_METAL_STREAMING_EXPERT_TIMING_SUMMARY',
+                 'DS4_ARGODRIVE_ENGRAM_ASYNC',  # async Engram row reads (2026-09-16)
                # Prefill staging (2026-09-15). Without these the profile's prefill
                # knobs were rejected here and a Test Setup run measured the
                # unfixed layer-major sweep.
