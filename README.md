@@ -137,17 +137,20 @@ Open Live Hardware to check connected drives, memory and activity. Choose a fold
 
 This is a monitoring and saved-run analysis preview, not an automatic optimizer, and it does
 not include model weights. The beta is ad-hoc signed and not notarized; see the testing guide
-before installing. The guided test → tune → validate → save-settings workflow is the next
-product milestone and is not yet in the downloadable app — see the
-[streaming optimiser plan](docs/STREAMING-OPTIMIZER.md).
+before installing. The app already has the test and tune steps of the guided test → tune →
+validate → save-settings workflow: a Monitor → Test setup dialog that starts a short
+inference run, and a Benchmark tab (drive calibration and a streaming recommendation). The
+validation, export and apply-settings steps are the next product milestone and are not yet
+in the downloadable app — see the [streaming optimiser plan](docs/STREAMING-OPTIMIZER.md).
 
 ```sh
 # Review saved runs without starting a hardware sampler
 ./argodrive run --reports-only --runs /path/to/arms
 ```
 
-Open http://localhost:8130. Use Settings to validate or change the run folder. See the
-[dashboard guide](docs/DASHBOARD.md) for metric definitions, or
+Open http://localhost:8130 (the `./argodrive run` default port; the packaged app starts its
+backend on a free port and opens it in its own window). Use Settings to validate or change
+the run folder. See the [dashboard guide](docs/DASHBOARD.md) for metric definitions, or
 [development setup](docs/BETA-DEVELOPMENT.md) for live collection. Python 3.10+ is required;
 the UI has no runtime package dependencies. A self-contained Apple-silicon technical preview
 can be built with [scripts/build-macos.py](scripts/build-macos.py); see
@@ -239,8 +242,8 @@ the chart script in the benchmark package
 | directory | tool | what it does |
 |---|---|---|
 | `monitor/` | `k3-diskscope.c` | 100 ms sampler of per-device read bytes and ops, RAM, CPU and GPU counters, to CSV. `cc -O2 -o k3-diskscope k3-diskscope.c -framework IOKit -framework CoreFoundation` |
-| `monitor/` | `k3-live.py` | local web dashboard on port 8130: live per-drive throughput, arm history with same-length deltas, by-layer barrier report from a per-read trace, CSV exports |
-| `monitor/` | `app.js` (Monitor → Advanced) | milliseconds per read, reads in flight, duty cycle and read size per drive, from IOKit completed-read statistics. Throughput charts cannot explain why another drive helps when the workload uses 19% of the available bandwidth; a split read completes when its slowest slice does, and this view shows that slice shrinking |
+| `monitor/` | `k3-live.py` | local web dashboard (port 8130 from `./argodrive run`; a free port in the packaged app): live per-drive throughput, arm history with same-length deltas, by-layer barrier report from a per-read trace, CSV exports |
+| `monitor/` | `app.js` (Monitor → Chart layers → Advanced) | milliseconds per read, reads in flight, duty cycle and read size per drive, from IOKit completed-read statistics. Throughput charts cannot explain why another drive helps when the workload uses 19% of the available bandwidth; a split read completes when its slowest slice does, and this view shows that slice shrinking |
 | `monitor/` | `k3-memsample.sh` | one line per second of macOS memory truth (used / available / wired / swap) |
 | `harness/` | `k3-arm.sh`, `k3-arm-inner.sh`, `k3-measure.sh` | one measured arm: the configuration of record as environment, cold start enforced, swap guard, device map recorded, sampler and memory log per arm, text-identity check |
 | `harness/` | `k3-pressure.c` | memory-pressure step before an arm (records what preceded each measurement) |

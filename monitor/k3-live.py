@@ -84,6 +84,7 @@ for _sig in (signal.SIGTERM, signal.SIGINT):
 from argodrive_core import (VERSION, load_config, discover_drives, CounterBuckets,
                             engine_processes, chunk_progress)
 from streaming_profile import streaming_profile, engine_header, arm_artifacts
+from decode_budget import decode_budget
 
 
 def arguments():
@@ -2322,6 +2323,13 @@ def arm_detail(block: str, arm: str) -> bytes:
     out['files'] = arm_artifacts(path)
     out['folder'] = os.path.dirname(path)
     out['log_path'] = path
+    # DeepSeek V4.1 per-token timeline (DS4_ARGODRIVE_TIMELINE) beside the log.
+    # A run recorded without one has no budget -- None, never zeros -- and a
+    # damaged file must not take the rest of the detail down with it.
+    try:
+        out['decode_budget'] = decode_budget(os.path.dirname(path))
+    except Exception:
+        out['decode_budget'] = None
     return json.dumps(out, separators=(",", ":")).encode()
 
 

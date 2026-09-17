@@ -1894,3 +1894,9 @@ main:has(.monitor-source-note) .combined-drive-card .live-drive-history { height
 .adv-bar i{display:block;height:100%;border-radius:4px}
 .adv-readout{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:12px;color:var(--muted)}
 .adv-readout strong{color:var(--text);font-variant-numeric:tabular-nums}
+/* Decode budget (run details): one token as a stacked bar, six segments that sum to the token. */
+.budget-bar{display:flex;height:14px;border-radius:6px;overflow:hidden;background:var(--surface-2);margin:4px 0 10px}
+.budget-bar i{display:block;height:100%;min-width:0}
+.budget-legend{gap:8px 16px;font-size:12px}
+.budget-legend strong{color:var(--text);font-variant-numeric:tabular-nums}
+.budget-line{margin:10px 0 0;font-size:13px;font-variant-numeric:tabular-nums}
