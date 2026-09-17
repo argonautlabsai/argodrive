@@ -22,7 +22,7 @@ same output SHA-256.
 | model | engine | baseline | best measured | gain |
 |---|---|---|---|--:|
 | DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 16.50 / 10.44 (vs our one-drive) · 16.23 / 10.61 (vs our three-drive) | one drive, no replicas: **28.04 / 14.38** · three drives: **43.62 / 17.38** | **1.70× / 2.69×** |
-| GLM-5.3, 744B | ds4 fork | our fork, one drive: 2.02 | four drives: **3.54** | **1.8×** |
+| GLM-5.3, 744B (434 GB at 4-bit) | ds4 fork | our fork, one drive: 2.02 | four drives: **3.70** · with the scheduling patch **4.21** at 128 tokens | **1.8×** · **2.1×** |
 | Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
 
 All on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
@@ -42,6 +42,23 @@ gets that. The three-drive column adds weighted split reads across internal + tw
 
 Time to first token on a 512-token prompt, which is the question everyone asks next:
 **31.5 s → 18.3 s on one drive → 11.7 s on three.**
+
+### GLM-5.3, the 744B model
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/glm-ladder-dark.svg">
+  <img src="charts/glm-ladder.svg" alt="GLM-5.3 744B at 4-bit streamed from SSD on an M5 Max. Steady decode over 200 generated tokens: internal SSD only 2.02 tok/s, plus one external 2.44, plus two 2.90, plus three 3.70. Scheduling patch on four drives: 3.66 to 4.21 tok/s at 128 tokens, 3.46 to 4.02 at 512, byte-identical output.">
+</picture>
+
+Same machine, same method, a model 1.4× the size of V4.1 with 256 experts and 8 active per
+token. The drive ladder is 200 generated tokens on interleaved pairs (2026-09-10); the second
+panel is the scheduling patch measured against the same engine with those optimisations off,
+medians of three interleaved pairs (2026-09-11), four drives. Every arm in both panels produced
+byte-identical output. Time to first token is about 4.5 s on a short prompt and 14 s on a
+108-token one; prefill is the weak spot at this size. The routed experts are the unsloth
+UD-Q4_K_XL release requantised to uniform Q4_K, trunk Q8_0. The GLM patch, harness and requant
+recipe are being published next; until then these are our numbers, not yet reproducible from
+the branch.
 
 ## What the instruments show
 
