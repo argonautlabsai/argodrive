@@ -19,9 +19,10 @@ def chart(spec, dark=False):
     base = '#6b7280' if dark else '#b4bac7'
     track = '#1a1f2b' if dark else '#f1f3f7'
     accents = ['#8fa9ff', '#5b86f5', '#2f6beb', '#1d4fd1'] if dark else ['#8aa4f7', '#4f7df3', '#1b5bea', '#1447c2']
-    W, pad_l, pad_r, top = 1000, 236, 26, 56
+    W, pad_l, pad_r, top = 1000, int(spec.get('pad_left', 236)), 26, 56
+    radius = float(spec.get('radius', 12))
     panels = spec['panels']
-    heights = [38 + 36 * len(p['bars']) + 26 for p in panels]
+    heights = [38 + (16 if p.get('note') else 0) + 36 * len(p['bars']) + 26 for p in panels]
     notes = spec['footnote'] if isinstance(spec['footnote'], list) else [spec['footnote']]
     H = top + sum(heights) + 30 + 16 * len(notes)
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
@@ -36,6 +37,9 @@ def chart(spec, dark=False):
         track_w = W - pad_l - pad_r - 132
         out.append(f'<text x="{pad_l}" y="{y + 22}" font-size="13.5" font-weight="700" fill="{fg}">{panel["unit"]}</text>')
         by = y + 38
+        if panel.get('note'):
+            out.append(f'<text x="{pad_l}" y="{y + 38}" font-size="11.5" fill="{muted}">{panel["note"]}</text>')
+            by += 16
         ref = next((b['value'] for b in bars if b.get('base')), bars[0]['value'])
         ai = 0
         for b in bars:
@@ -47,8 +51,8 @@ def chart(spec, dark=False):
             bw = track_w * (v / mx)
             out.append(f'<text x="{pad_l - 12}" y="{by + 16.5}" font-size="12" text-anchor="end" '
                        f'fill="{muted if is_base else fg}">{b["label"]}</text>')
-            out.append(f'<rect x="{pad_l}" y="{by}" width="{track_w:.1f}" height="24" rx="12" fill="{track}"/>')
-            out.append(f'<rect x="{pad_l}" y="{by}" width="{max(bw, 24):.1f}" height="24" rx="12" fill="{colour}"/>')
+            out.append(f'<rect x="{pad_l}" y="{by}" width="{track_w:.1f}" height="24" rx="{radius}" fill="{track}"/>')
+            out.append(f'<rect x="{pad_l}" y="{by}" width="{max(bw, 2 * radius, 8):.1f}" height="24" rx="{radius}" fill="{colour}"/>')
             out.append(f'<text x="{pad_l + bw + 10:.1f}" y="{by + 16.5}" font-size="13" font-weight="700" fill="{fg}">{v:.2f}</text>')
             if not is_base and ref:
                 out.append(f'<text x="{pad_l + bw + 59:.1f}" y="{by + 16.5}" font-size="12.5" font-weight="600" '
