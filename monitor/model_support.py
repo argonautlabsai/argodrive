@@ -31,6 +31,7 @@ def ds41_fork_profile(model_path, replica_paths):
         'DS4_ARGODRIVE_ENGRAM_ASYNC': '1',  # Engram rows read on a concurrent queue, joined at layer 1: +2% decode over 4 interleaved pairs (2026-09-16)
         'DS4_ARGODRIVE_GAP_KEEPALIVE': '1',  # GPU keep-alive only while the CPU waits for expert reads: +3.4% decode over 4 interleaved pairs at 512/200 (2026-09-17), output identical
         'DS4_TP_KEEPALIVE_TGS': '8',  # 8 threadgroups: 64 halves speed (the spinner cannot stop in time), 1 is the TP default
+        'DS4_TP_KEEPALIVE_ITERS': '300000',  # short spin so the keep-alive stops sooner when a read lands: 17.80 -> 18.06 tok/s, 4/4 pairs at 512/200 (2026-09-17)
         'DS4_ARGODRIVE_PHASES': '1',
         # Prefill staging. These are what the 2026-09-15 prompt-processing result
         # measures, and without them a test reproduces the unfixed layer-major
