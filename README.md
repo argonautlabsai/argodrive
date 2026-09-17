@@ -1,21 +1,18 @@
 # ARGODRIVE
 
 **Layout, balancer and instruments for running mixture-of-experts models from SSDs.**
-A 518 GB model on a 128 GB laptop: every token waits on disk, so what matters is not how
-much bandwidth you own but how long the slowest required read takes.
+Models of 518 GB to 1.44 TB on a 128 GB laptop: every token waits on disk, so what matters is
+not how much bandwidth you own but how long the slowest required read takes.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-dark.svg">
-  <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max. Prompt processing: upstream ds4 on the internal SSD 16.23 tok/s; our fork 28.04 on the same single drive (1.73x), 36.88 with one external (2.27x), 43.62 with two (2.69x). Steady decode: upstream 10.59; our fork 14.38 (1.36x), 16.05 (1.52x), 17.38 (1.64x).">
+  <source media="(prefers-color-scheme: dark)" srcset="charts/drives-ladder-dark.svg">
+  <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: 14.38, 16.05, 17.38 (1.21x). Output identical at every rung.">
 </picture>
 
-**The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
-of every routed layer, but a 512-token chunk only routes to 187 of 384 — so it reads about
-twice what the model touches. Fixing that alone is worth **1.73× prompt processing on one
-internal SSD**, no replicas involved. Drives after that just shrink each split read further.
-
-Every bar is a median of interleaved arms against pinned upstream `bd66c40`, all with the
-same output SHA-256.
+Three models, three forks, one method: the trunk stays in memory, the routed experts stream
+from NVMe, and every expert read is split across byte-identical replicas on however many
+drives are attached. Kimi K3 (2.78T) goes from 0.55 to 0.96 tok/s, GLM-5.3 (744B) from 2.02
+to 3.70, DeepSeek V4.1-Flash from 14.38 to 17.38, with the same output at every rung.
 
 ## What it has done
 
@@ -43,6 +40,21 @@ gets that. The three-drive column adds weighted split reads across internal + tw
 Time to first token on a 512-token prompt, which is the question everyone asks next:
 **31.5 s → 18.3 s on one drive → 11.7 s on three.**
 
+### Kimi K3, the 2.78T model
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/k3-ladder-dark.svg">
+  <img src="charts/k3-ladder.svg" alt="Kimi K3 at 4-bit streamed from SSD on an M5 Max. Steady decode by drive count: internal SSD only 0.55 tok/s, plus one external 0.75, plus two 0.89, plus three 0.96 (1.75x). Public 17-token prompt, median of three runs per rung.">
+</picture>
+
+The largest of the three: 1.44 TB of 4-bit experts, 384 experts with 8 active per token, run
+by our `deltafin` fork. The ladder is the public 17-token prompt, a median of three runs at
+every rung, output identical throughout. On four drives it holds **1.00 tok/s steady over 512
+generated tokens** and 1.13 over 128. Prefill is the cost at this size: a 512-token prompt
+takes about six minutes to first token, which is why prefix caching and expert-major prefill
+are the next work on it. Package, manifests and results:
+[`argonautlabsai/deltafin`](https://github.com/argonautlabsai/deltafin/tree/main/k3-public-bench).
+
 ### GLM-5.3, the 744B model
 
 <picture>
@@ -59,6 +71,21 @@ byte-identical output. Time to first token is about 4.5 s on a short prompt and 
 UD-Q4_K_XL release requantised to uniform Q4_K, trunk Q8_0. The GLM patch, harness and requant
 recipe are being published next; until then these are our numbers, not yet reproducible from
 the branch.
+
+### DeepSeek V4.1-Flash, against upstream
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-dark.svg">
+  <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max. Prompt processing: upstream ds4 on the internal SSD 16.23 tok/s; our fork 28.04 on the same single drive (1.73x), 36.88 with one external (2.27x), 43.62 with two (2.69x). Steady decode: upstream 10.59; our fork 14.38 (1.36x), 16.05 (1.52x), 17.38 (1.64x).">
+</picture>
+
+**The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
+of every routed layer, but a 512-token chunk only routes to 187 of 384 — so it reads about
+twice what the model touches. Fixing that alone is worth **1.73× prompt processing on one
+internal SSD**, no replicas involved. Drives after that just shrink each split read further.
+
+Every bar is a median of interleaved arms against pinned upstream `bd66c40`, all with the
+same output SHA-256.
 
 ## What the instruments show
 
