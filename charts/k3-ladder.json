@@ -1,0 +1,33 @@
+{
+  "title": "Kimi K3 (2.78T MoE, 1.44 TB at 4-bit) streamed from SSD — M5 Max, 128 GB",
+  "subtitle": "steady decode, output identical at every rung · higher is better",
+  "footnote": [
+    "Drive ladder: public 17-token prompt, median of three runs per rung (2026-09-08); “+N external” add byte-identical replicas",
+    "of the expert set on Thunderbolt 5 NVMe. Four drives hold 1.00 tok/s steady over 512 generated tokens, 1.13 over 128.",
+    "A 512-token prompt takes about six minutes to first token. Engine and package: argonautlabsai/deltafin."
+  ],
+  "panels": [
+    {
+      "unit": "steady decode tok/s, by drive count",
+      "bars": [
+        {
+          "label": "Internal SSD only",
+          "value": 0.55,
+          "base": true
+        },
+        {
+          "label": "+1 external",
+          "value": 0.75
+        },
+        {
+          "label": "+2 external",
+          "value": 0.89
+        },
+        {
+          "label": "+3 external",
+          "value": 0.96
+        }
+      ]
+    }
+  ]
+}
