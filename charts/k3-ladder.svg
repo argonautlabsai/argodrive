@@ -4,24 +4,24 @@
 <text x="236" y="48" font-size="12.5" fill="#5d6478">steady decode, output identical at every rung · higher is better</text>
 <text x="236" y="78" font-size="13.5" font-weight="700" fill="#14161c">steady decode tok/s, by drive count</text>
 <text x="224" y="110.5" font-size="12" text-anchor="end" fill="#5d6478">Internal SSD only</text>
-<rect x="236" y="94" width="606.0" height="24" rx="12" fill="#f1f3f7"/>
-<rect x="236" y="94" width="259.1" height="24" rx="12" fill="#b4bac7"/>
+<rect x="236" y="94" width="606.0" height="24" rx="12.0" fill="#f1f3f7"/>
+<rect x="236" y="94" width="259.1" height="24" rx="12.0" fill="#b4bac7"/>
 <text x="505.1" y="110.5" font-size="13" font-weight="700" fill="#14161c">0.55</text>
 <text x="224" y="146.5" font-size="12" text-anchor="end" fill="#14161c">+1 external</text>
-<rect x="236" y="130" width="606.0" height="24" rx="12" fill="#f1f3f7"/>
-<rect x="236" y="130" width="353.3" height="24" rx="12" fill="#8aa4f7"/>
+<rect x="236" y="130" width="606.0" height="24" rx="12.0" fill="#f1f3f7"/>
+<rect x="236" y="130" width="353.3" height="24" rx="12.0" fill="#fb923c"/>
 <text x="599.3" y="146.5" font-size="13" font-weight="700" fill="#14161c">0.75</text>
-<text x="648.3" y="146.5" font-size="12.5" font-weight="600" fill="#8aa4f7">1.36×</text>
+<text x="648.3" y="146.5" font-size="12.5" font-weight="600" fill="#fb923c">1.36×</text>
 <text x="224" y="182.5" font-size="12" text-anchor="end" fill="#14161c">+2 external</text>
-<rect x="236" y="166" width="606.0" height="24" rx="12" fill="#f1f3f7"/>
-<rect x="236" y="166" width="419.3" height="24" rx="12" fill="#4f7df3"/>
+<rect x="236" y="166" width="606.0" height="24" rx="12.0" fill="#f1f3f7"/>
+<rect x="236" y="166" width="419.3" height="24" rx="12.0" fill="#f4611f"/>
 <text x="665.3" y="182.5" font-size="13" font-weight="700" fill="#14161c">0.89</text>
-<text x="714.3" y="182.5" font-size="12.5" font-weight="600" fill="#4f7df3">1.62×</text>
+<text x="714.3" y="182.5" font-size="12.5" font-weight="600" fill="#f4611f">1.62×</text>
 <text x="224" y="218.5" font-size="12" text-anchor="end" fill="#14161c">+3 external</text>
-<rect x="236" y="202" width="606.0" height="24" rx="12" fill="#f1f3f7"/>
-<rect x="236" y="202" width="452.2" height="24" rx="12" fill="#1b5bea"/>
+<rect x="236" y="202" width="606.0" height="24" rx="12.0" fill="#f1f3f7"/>
+<rect x="236" y="202" width="452.2" height="24" rx="12.0" fill="#dc2626"/>
 <text x="698.2" y="218.5" font-size="13" font-weight="700" fill="#14161c">0.96</text>
-<text x="747.2" y="218.5" font-size="12.5" font-weight="600" fill="#1b5bea">1.75×</text>
+<text x="747.2" y="218.5" font-size="12.5" font-weight="600" fill="#dc2626">1.75×</text>
 <text x="236" y="294" font-size="11.5" fill="#5d6478">Drive ladder: public 17-token prompt, median of three runs per rung (2026-09-08); “+N external” add byte-identical replicas</text>
 <text x="236" y="310" font-size="11.5" fill="#5d6478">of the expert set on Thunderbolt 5 NVMe. Four drives hold 1.00 tok/s steady over 512 generated tokens, 1.13 over 128.</text>
 <text x="236" y="326" font-size="11.5" fill="#5d6478">A 512-token prompt takes about six minutes to first token. Engine and package: argonautlabsai/deltafin.</text>
