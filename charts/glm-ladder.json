@@ -1,0 +1,55 @@
+{
+  "title": "GLM-5.3 (744B MoE, 434 GB at 4-bit) streamed from SSD — M5 Max, 128 GB",
+  "subtitle": "greedy, cold expert cache, every arm byte-identical output MD5 · higher is better",
+  "footnote": [
+    "Drive ladder: 200 generated tokens, 2026-09-10 interleaved pairs; “+N external” add byte-identical replicas of the 434 GB file.",
+    "Scheduling patch: 2026-09-11, medians of three interleaved pairs on four drives. Engine antirez/ds4 6289c51 + our patch (publication pending)."
+  ],
+  "panels": [
+    {
+      "unit": "steady decode tok/s, by drive count (200 generated tokens)",
+      "bars": [
+        {
+          "label": "Internal SSD only",
+          "value": 2.02,
+          "base": true
+        },
+        {
+          "label": "+1 external (split reads 10:5)",
+          "value": 2.44
+        },
+        {
+          "label": "+2 external (10:5:5)",
+          "value": 2.9
+        },
+        {
+          "label": "+3 external (10:5:5:4)",
+          "value": 3.7
+        }
+      ]
+    },
+    {
+      "unit": "scheduling patch on four drives: router-lookahead prefetch, poll-gated pre-commit, eviction scan",
+      "bars": [
+        {
+          "label": "Optimisations off · 128 tokens",
+          "value": 3.66,
+          "base": true
+        },
+        {
+          "label": "Config of record · 128 tokens",
+          "value": 4.21
+        },
+        {
+          "label": "Optimisations off · 512 tokens",
+          "value": 3.46,
+          "base": true
+        },
+        {
+          "label": "Config of record · 512 tokens",
+          "value": 4.02
+        }
+      ]
+    }
+  ]
+}
