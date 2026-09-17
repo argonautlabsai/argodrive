@@ -10,7 +10,7 @@ def chart(data, dark=False):
     bg      = '#0d1017' if dark else '#ffffff'
     base    = '#6b7280' if dark else '#b4bac7'
     track   = '#1a1f2b' if dark else '#f1f3f7'
-    accents = ['#fdba74', '#fb923c', '#f87171'] if dark else ['#fb923c', '#f4611f', '#dc2626']
+    accents = ['#6f7ee4', '#8c82f0', '#b0a2ff'] if dark else ['#93a6ec', '#6f7ee4', '#6153dc']
     W, panel_h, pad_l, pad_r, top = 1000, 204, 196, 26, 56
     rows = []
     for pi, (metric, unit) in enumerate([('prefill', 'prompt processing tok/s'), ('decode', 'steady decode tok/s')]):
