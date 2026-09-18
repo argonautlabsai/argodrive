@@ -32,6 +32,7 @@ def chart(spec, dark=False):
            f'<text x="{pad_l}" y="48" font-size="12.5" fill="{muted}">{spec["subtitle"]}</text>']
     y = top
     for panel, ph in zip(panels, heights):
+        dec = int(panel.get('decimals', 2))
         bars = panel['bars']
         mx = max(b['value'] for b in bars) * 1.34
         track_w = W - pad_l - pad_r - 132

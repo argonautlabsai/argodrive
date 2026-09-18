@@ -27,8 +27,7 @@
           "label": "+3",
           "value": 0.96
         }
-      ],
-      "decimals": 2
+      ]
     },
     {
       "name": "GLM-5.3 · 744B · 434 GB",
@@ -51,8 +50,7 @@
           "label": "+3",
           "value": 3.7
         }
-      ],
-      "decimals": 1
+      ]
     },
     {
       "name": "DeepSeek V4.1-Flash · 552B · 518 GB",
@@ -75,8 +73,7 @@
           "label": "+2",
           "value": 18.06
         }
-      ],
-      "decimals": 1
+      ]
     }
   ]
 }
