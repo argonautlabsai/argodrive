@@ -27,7 +27,7 @@
       ]
     },
     {
-      "name": "DeepSeek V4.1-Flash · 321B · 518 GB",
+      "name": "DeepSeek V4.1-Flash · 552B · 518 GB",
       "note": "384 experts, 6 active per token",
       "bars": [
         {"label": "1 drive", "value": 14.38, "base": true},

@@ -54,7 +54,7 @@
 <text x="609.0" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">3.70</text>
 <text x="609.0" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6153dc">1.83×</text>
 <text x="609.0" y="370" font-size="12" text-anchor="middle" fill="#14161c">+3</text>
-<text x="679.3333333333334" y="88" font-size="14" font-weight="700" fill="#14161c">DeepSeek V4.1-Flash · 321B · 518 GB</text>
+<text x="679.3333333333334" y="88" font-size="14" font-weight="700" fill="#14161c">DeepSeek V4.1-Flash · 552B · 518 GB</text>
 <text x="679.3333333333334" y="104" font-size="11.5" fill="#5d6478">384 experts, 6 active per token</text>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
 <rect x="699.8" y="176.2" width="56.0" height="201.8" rx="28.0" fill="#b4bac7"/>
