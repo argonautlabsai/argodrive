@@ -53,7 +53,7 @@ def chart(spec, dark=False):
                        f'fill="{muted if is_base else fg}">{b["label"]}</text>')
             out.append(f'<rect x="{pad_l}" y="{by}" width="{track_w:.1f}" height="24" rx="{radius}" fill="{track}"/>')
             out.append(f'<rect x="{pad_l}" y="{by}" width="{max(bw, 2 * radius, 8):.1f}" height="24" rx="{radius}" fill="{colour}"/>')
-            out.append(f'<text x="{pad_l + bw + 10:.1f}" y="{by + 16.5}" font-size="13" font-weight="700" fill="{fg}">{v:.2f}</text>')
+            out.append(f'<text x="{pad_l + bw + 10:.1f}" y="{by + 16.5}" font-size="13" font-weight="700" fill="{fg}">{v:.{dec}f}</text>')
             if not is_base and ref:
                 out.append(f'<text x="{pad_l + bw + 59:.1f}" y="{by + 16.5}" font-size="12.5" font-weight="600" '
                            f'fill="{colour}">{v / ref:.2f}×</text>')

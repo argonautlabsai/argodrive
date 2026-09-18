@@ -34,46 +34,52 @@
 <rect x="368.5" y="235.4" width="45.1" height="137.2" rx="22.5" fill="#b4bac7"/>
 <rect x="367.5" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="354.6666666666667" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="391.0" y="227.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.02</text>
+<text x="391.0" y="227.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.0</text>
 <text x="391.0" y="370" font-size="12" text-anchor="middle" fill="#5d6478">1 drive</text>
 <rect x="441.1" y="211.5" width="45.1" height="161.0" rx="22.5" fill="#93a6ec"/>
 <rect x="440.1" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="354.6666666666667" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="463.7" y="203.5" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.44</text>
+<text x="463.7" y="203.5" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.4</text>
 <text x="463.7" y="187.5" font-size="12" font-weight="600" text-anchor="middle" fill="#93a6ec">1.21×</text>
 <text x="463.7" y="370" font-size="12" text-anchor="middle" fill="#14161c">+1</text>
 <rect x="513.8" y="185.4" width="45.1" height="187.1" rx="22.5" fill="#6f7ee4"/>
 <rect x="512.8" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="354.6666666666667" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="536.3" y="177.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.90</text>
+<text x="536.3" y="177.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">2.9</text>
 <text x="536.3" y="161.4" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.44×</text>
 <text x="536.3" y="370" font-size="12" text-anchor="middle" fill="#14161c">+2</text>
 <rect x="586.5" y="140.0" width="45.1" height="232.5" rx="22.5" fill="#6153dc"/>
 <rect x="585.5" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="354.6666666666667" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="609.0" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">3.70</text>
+<text x="609.0" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">3.7</text>
 <text x="609.0" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6153dc">1.83×</text>
 <text x="609.0" y="370" font-size="12" text-anchor="middle" fill="#14161c">+3</text>
 <text x="679.3333333333334" y="88" font-size="14" font-weight="700" fill="#14161c">DeepSeek V4.1-Flash · 552B · 518 GB</text>
-<text x="679.3333333333334" y="104" font-size="11.5" fill="#5d6478">384 experts, 6 active per token</text>
+<text x="679.3333333333334" y="104" font-size="11.5" fill="#5d6478">384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive</text>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<rect x="699.8" y="176.2" width="56.0" height="201.8" rx="28.0" fill="#b4bac7"/>
-<rect x="698.8" y="351" width="58.0" height="30.0" fill="#ffffff"/>
+<rect x="693.1" y="226.9" width="45.1" height="145.7" rx="22.5" fill="#b4bac7"/>
+<rect x="692.1" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="727.8" y="168.2" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">14.38</text>
-<text x="727.8" y="370" font-size="12" text-anchor="middle" fill="#5d6478">1 drive</text>
-<rect x="796.7" y="156.1" width="56.0" height="221.9" rx="28.0" fill="#93a6ec"/>
-<rect x="795.7" y="351" width="58.0" height="30.0" fill="#ffffff"/>
+<text x="715.7" y="218.9" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">10.6</text>
+<text x="715.7" y="370" font-size="12" text-anchor="middle" fill="#5d6478">upstream</text>
+<rect x="765.8" y="182.8" width="45.1" height="189.7" rx="22.5" fill="#93a6ec"/>
+<rect x="764.8" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="824.7" y="148.1" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">16.05</text>
-<text x="824.7" y="132.1" font-size="12" font-weight="600" text-anchor="middle" fill="#93a6ec">1.12×</text>
-<text x="824.7" y="370" font-size="12" text-anchor="middle" fill="#14161c">+1</text>
-<rect x="893.6" y="140.0" width="56.0" height="238.0" rx="28.0" fill="#6f7ee4"/>
-<rect x="892.6" y="351" width="58.0" height="30.0" fill="#ffffff"/>
+<text x="788.3" y="174.8" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">14.4</text>
+<text x="788.3" y="158.8" font-size="12" font-weight="600" text-anchor="middle" fill="#93a6ec">1.36×</text>
+<text x="788.3" y="370" font-size="12" text-anchor="middle" fill="#14161c">1 drive</text>
+<rect x="838.5" y="163.4" width="45.1" height="209.2" rx="22.5" fill="#6f7ee4"/>
+<rect x="837.5" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="921.6" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">17.38</text>
-<text x="921.6" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.21×</text>
-<text x="921.6" y="370" font-size="12" text-anchor="middle" fill="#14161c">+2</text>
+<text x="861.0" y="155.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">16.1</text>
+<text x="861.0" y="139.4" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.52×</text>
+<text x="861.0" y="370" font-size="12" text-anchor="middle" fill="#14161c">+1</text>
+<rect x="911.1" y="140.0" width="45.1" height="232.5" rx="22.5" fill="#6153dc"/>
+<rect x="910.1" y="351" width="47.1" height="24.5" fill="#ffffff"/>
+<rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
+<text x="933.7" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">18.1</text>
+<text x="933.7" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6153dc">1.71×</text>
+<text x="933.7" y="370" font-size="12" text-anchor="middle" fill="#14161c">+2</text>
 <text x="30" y="454" font-size="11.5" fill="#5d6478">Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08). GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).</text>
-<text x="30" y="470" font-size="11.5" fill="#5d6478">DeepSeek V4.1-Flash: ds4 fork, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15); upstream ds4 on the same single drive decodes 10.59.</text>
+<text x="30" y="470" font-size="11.5" fill="#5d6478">DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);</text>
 </svg>

@@ -3,37 +3,80 @@
   "subtitle": "steady decode tok/s · one drive = the internal SSD; +1 / +2 / +3 add Thunderbolt 5 NVMe enclosures holding byte-identical replicas · output identical at every rung",
   "footnote": [
     "Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08). GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).",
-    "DeepSeek V4.1-Flash: ds4 fork, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15); upstream ds4 on the same single drive decodes 10.59."
+    "DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);"
   ],
   "panels": [
     {
       "name": "Kimi K3 · 2.78T · 1.44 TB",
       "note": "384 experts, 8 active per token",
       "bars": [
-        {"label": "1 drive", "value": 0.55, "base": true},
-        {"label": "+1", "value": 0.75},
-        {"label": "+2", "value": 0.89},
-        {"label": "+3", "value": 0.96}
-      ]
+        {
+          "label": "1 drive",
+          "value": 0.55,
+          "base": true
+        },
+        {
+          "label": "+1",
+          "value": 0.75
+        },
+        {
+          "label": "+2",
+          "value": 0.89
+        },
+        {
+          "label": "+3",
+          "value": 0.96
+        }
+      ],
+      "decimals": 2
     },
     {
       "name": "GLM-5.3 · 744B · 434 GB",
       "note": "256 experts, 8 active per token",
       "bars": [
-        {"label": "1 drive", "value": 2.02, "base": true},
-        {"label": "+1", "value": 2.44},
-        {"label": "+2", "value": 2.90},
-        {"label": "+3", "value": 3.70}
-      ]
+        {
+          "label": "1 drive",
+          "value": 2.02,
+          "base": true
+        },
+        {
+          "label": "+1",
+          "value": 2.44
+        },
+        {
+          "label": "+2",
+          "value": 2.9
+        },
+        {
+          "label": "+3",
+          "value": 3.7
+        }
+      ],
+      "decimals": 1
     },
     {
       "name": "DeepSeek V4.1-Flash · 552B · 518 GB",
-      "note": "384 experts, 6 active per token",
+      "note": "384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive",
       "bars": [
-        {"label": "1 drive", "value": 14.38, "base": true},
-        {"label": "+1", "value": 16.05},
-        {"label": "+2", "value": 17.38}
-      ]
+        {
+          "label": "upstream",
+          "value": 10.59,
+          "base": true
+        },
+        {
+          "label": "1 drive",
+          "value": 14.38
+        },
+        {
+          "label": "+1",
+          "value": 16.05
+        },
+        {
+          "label": "+2",
+          "value": 18.06
+        }
+      ],
+      "decimals": 1
     }
   ]
 }

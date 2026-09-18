@@ -31,6 +31,7 @@ def chart(spec, dark=False):
            f'<text x="{pad}" y="30" font-size="18" font-weight="700" fill="{fg}">{spec["title"]}</text>',
            f'<text x="{pad}" y="48" font-size="12.5" fill="{muted}">{spec["subtitle"]}</text>']
     for pi, panel in enumerate(panels):
+        dec = int(panel.get('decimals', 2))
         x0 = pad + pi * (panel_w + gap)
         bars = panel['bars']
         n = len(bars)
@@ -58,7 +59,7 @@ def chart(spec, dark=False):
             out.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{h + bw / 2:.1f}" rx="{bw / 2:.1f}" fill="{colour}"/>')
             out.append(f'<rect x="{x - 1:.1f}" y="{base_y + 1}" width="{bw + 2:.1f}" height="{bw / 2 + 2:.1f}" fill="{bg}"/>')
             out.append(f'<rect x="{x0}" y="{base_y}" width="{panel_w:.1f}" height="2" rx="1" fill="{track}"/>')
-            out.append(f'<text x="{cx:.1f}" y="{y - 8:.1f}" font-size="13.5" font-weight="700" text-anchor="middle" fill="{fg}">{v:.2f}</text>')
+            out.append(f'<text x="{cx:.1f}" y="{y - 8:.1f}" font-size="13.5" font-weight="700" text-anchor="middle" fill="{fg}">{v:.{dec}f}</text>')
             if not is_base and ref:
                 out.append(f'<text x="{cx:.1f}" y="{y - 24:.1f}" font-size="12" font-weight="600" text-anchor="middle" fill="{colour}">{v / ref:.2f}×</text>')
             out.append(f'<text x="{cx:.1f}" y="{base_y + 20}" font-size="12" text-anchor="middle" fill="{muted if is_base else fg}">{b["label"]}</text>')
