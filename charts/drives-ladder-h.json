@@ -30,8 +30,7 @@
           "label": "+3 external",
           "value": 0.96
         }
-      ],
-      "decimals": 2
+      ]
     },
     {
       "unit": "GLM-5.3 · 744B · 434 GB",
@@ -54,8 +53,7 @@
           "label": "+3 external",
           "value": 3.7
         }
-      ],
-      "decimals": 2
+      ]
     },
     {
       "unit": "DeepSeek V4.1-Flash · 552B · 518 GB",
@@ -74,8 +72,7 @@
           "label": "+2 external",
           "value": 17.38
         }
-      ],
-      "decimals": 2
+      ]
     }
   ],
   "pad_left": 160
