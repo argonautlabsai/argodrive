@@ -57,20 +57,24 @@
     },
     {
       "unit": "DeepSeek V4.1-Flash · 552B · 518 GB",
-      "note": "384 experts, 6 active per token",
+      "note": "384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive",
       "bars": [
         {
-          "label": "Internal SSD only",
-          "value": 14.38,
+          "label": "upstream ds4, internal SSD",
+          "value": 10.59,
           "base": true
+        },
+        {
+          "label": "our fork, internal SSD only",
+          "value": 14.38
         },
         {
           "label": "+1 external",
           "value": 16.05
         },
         {
-          "label": "+2 external",
-          "value": 17.38
+          "label": "+2 external, GPU keep-alive",
+          "value": 18.06
         }
       ]
     }
