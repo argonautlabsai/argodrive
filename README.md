@@ -6,7 +6,7 @@ not how much bandwidth you own but how long the slowest required read takes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/drives-ladder-dark.svg">
-  <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: 14.38, 16.05, 18.06 (1.21x). Output identical at every rung.">
+  <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: 14.38, 16.05, 18.45 (1.28x). Output identical at every rung.">
 </picture>
 
 Three models, three forks, one method: the trunk stays in memory, the routed experts stream
