@@ -57,29 +57,29 @@
 <text x="679.3333333333334" y="88" font-size="14" font-weight="700" fill="#14161c">DeepSeek V4.1-Flash · 552B · 518 GB</text>
 <text x="679.3333333333334" y="104" font-size="11.5" fill="#5d6478">384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive</text>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<rect x="693.1" y="226.9" width="45.1" height="145.7" rx="22.5" fill="#b4bac7"/>
+<rect x="693.1" y="229.5" width="45.1" height="143.1" rx="22.5" fill="#b4bac7"/>
 <rect x="692.1" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="715.7" y="218.9" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">10.59</text>
+<text x="715.7" y="221.5" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">10.59</text>
 <text x="715.7" y="370" font-size="12" text-anchor="middle" fill="#5d6478">upstream</text>
-<rect x="765.8" y="182.8" width="45.1" height="189.7" rx="22.5" fill="#93a6ec"/>
+<rect x="765.8" y="186.3" width="45.1" height="186.2" rx="22.5" fill="#93a6ec"/>
 <rect x="764.8" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="788.3" y="174.8" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">14.38</text>
-<text x="788.3" y="158.8" font-size="12" font-weight="600" text-anchor="middle" fill="#93a6ec">1.36×</text>
+<text x="788.3" y="178.3" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">14.38</text>
+<text x="788.3" y="162.3" font-size="12" font-weight="600" text-anchor="middle" fill="#93a6ec">1.36×</text>
 <text x="788.3" y="370" font-size="12" text-anchor="middle" fill="#14161c">1 drive</text>
-<rect x="838.5" y="163.4" width="45.1" height="209.2" rx="22.5" fill="#6f7ee4"/>
+<rect x="838.5" y="167.3" width="45.1" height="205.2" rx="22.5" fill="#6f7ee4"/>
 <rect x="837.5" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="861.0" y="155.4" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">16.05</text>
-<text x="861.0" y="139.4" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.52×</text>
+<text x="861.0" y="159.3" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">16.05</text>
+<text x="861.0" y="143.3" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.52×</text>
 <text x="861.0" y="370" font-size="12" text-anchor="middle" fill="#14161c">+1</text>
 <rect x="911.1" y="140.0" width="45.1" height="232.5" rx="22.5" fill="#6153dc"/>
 <rect x="910.1" y="351" width="47.1" height="24.5" fill="#ffffff"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#f1f3f7"/>
-<text x="933.7" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">18.06</text>
-<text x="933.7" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6153dc">1.71×</text>
+<text x="933.7" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#14161c">18.45</text>
+<text x="933.7" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#6153dc">1.74×</text>
 <text x="933.7" y="370" font-size="12" text-anchor="middle" fill="#14161c">+2</text>
 <text x="30" y="454" font-size="11.5" fill="#5d6478">Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08). GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).</text>
-<text x="30" y="470" font-size="11.5" fill="#5d6478">DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);</text>
+<text x="30" y="470" font-size="11.5" fill="#5d6478">DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15; three-drive decode 2026-09-19 with the GPU keep-alive, decode split 10:6:6 and CPU keep-alive);</text>
 </svg>

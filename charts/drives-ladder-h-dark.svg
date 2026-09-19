@@ -48,25 +48,25 @@
 <text x="160" y="542" font-size="11.5" fill="#9aa1b2">384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive</text>
 <text x="148" y="574.5" font-size="12" text-anchor="end" fill="#9aa1b2">upstream ds4, internal SSD</text>
 <rect x="160" y="558" width="682.0" height="24" rx="4.0" fill="#1a1f2b"/>
-<rect x="160" y="558" width="298.4" height="24" rx="4.0" fill="#6b7280"/>
-<text x="468.4" y="574.5" font-size="13" font-weight="700" fill="#e6e8ee">10.59</text>
+<rect x="160" y="558" width="292.1" height="24" rx="4.0" fill="#6b7280"/>
+<text x="462.1" y="574.5" font-size="13" font-weight="700" fill="#e6e8ee">10.59</text>
 <text x="148" y="610.5" font-size="12" text-anchor="end" fill="#e6e8ee">our fork, internal SSD only</text>
 <rect x="160" y="594" width="682.0" height="24" rx="4.0" fill="#1a1f2b"/>
-<rect x="160" y="594" width="405.2" height="24" rx="4.0" fill="#6f7ee4"/>
-<text x="575.2" y="610.5" font-size="13" font-weight="700" fill="#e6e8ee">14.38</text>
-<text x="624.2" y="610.5" font-size="12.5" font-weight="600" fill="#6f7ee4">1.36×</text>
+<rect x="160" y="594" width="396.7" height="24" rx="4.0" fill="#6f7ee4"/>
+<text x="566.7" y="610.5" font-size="13" font-weight="700" fill="#e6e8ee">14.38</text>
+<text x="615.7" y="610.5" font-size="12.5" font-weight="600" fill="#6f7ee4">1.36×</text>
 <text x="148" y="646.5" font-size="12" text-anchor="end" fill="#e6e8ee">+1 external</text>
 <rect x="160" y="630" width="682.0" height="24" rx="4.0" fill="#1a1f2b"/>
-<rect x="160" y="630" width="452.3" height="24" rx="4.0" fill="#8c82f0"/>
-<text x="622.3" y="646.5" font-size="13" font-weight="700" fill="#e6e8ee">16.05</text>
-<text x="671.3" y="646.5" font-size="12.5" font-weight="600" fill="#8c82f0">1.52×</text>
-<text x="148" y="682.5" font-size="12" text-anchor="end" fill="#e6e8ee">+2 external, GPU keep-alive</text>
+<rect x="160" y="630" width="442.7" height="24" rx="4.0" fill="#8c82f0"/>
+<text x="612.7" y="646.5" font-size="13" font-weight="700" fill="#e6e8ee">16.05</text>
+<text x="661.7" y="646.5" font-size="12.5" font-weight="600" fill="#8c82f0">1.52×</text>
+<text x="148" y="682.5" font-size="12" text-anchor="end" fill="#e6e8ee">+2 external, keep-alives + split</text>
 <rect x="160" y="666" width="682.0" height="24" rx="4.0" fill="#1a1f2b"/>
 <rect x="160" y="666" width="509.0" height="24" rx="4.0" fill="#a394f7"/>
-<text x="679.0" y="682.5" font-size="13" font-weight="700" fill="#e6e8ee">18.06</text>
-<text x="728.0" y="682.5" font-size="12.5" font-weight="600" fill="#a394f7">1.71×</text>
+<text x="679.0" y="682.5" font-size="13" font-weight="700" fill="#e6e8ee">18.45</text>
+<text x="728.0" y="682.5" font-size="12.5" font-weight="600" fill="#a394f7">1.74×</text>
 <text x="160" y="758" font-size="11.5" fill="#9aa1b2">Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08).</text>
 <text x="160" y="774" font-size="11.5" fill="#9aa1b2">GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).</text>
 <text x="160" y="790" font-size="11.5" fill="#9aa1b2">DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);</text>
-<text x="160" y="806" font-size="11.5" fill="#9aa1b2">three-drive decode 18.06 with the GPU keep-alive of 2026-09-17 (four interleaved pairs, output identical; 17.38 before it).</text>
+<text x="160" y="806" font-size="11.5" fill="#9aa1b2">three-drive decode 18.45 with the GPU keep-alive (2026-09-17) and the decode split 10:6:6 + CPU keep-alive (2026-09-19); four interleaved pairs each, output identical.</text>
 </svg>

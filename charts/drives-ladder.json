@@ -3,7 +3,7 @@
   "subtitle": "steady decode tok/s · one drive = the internal SSD; +1 / +2 / +3 add Thunderbolt 5 NVMe enclosures holding byte-identical replicas · output identical at every rung",
   "footnote": [
     "Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08). GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).",
-    "DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);"
+    "DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15; three-drive decode 2026-09-19 with the GPU keep-alive, decode split 10:6:6 and CPU keep-alive);"
   ],
   "panels": [
     {
@@ -71,7 +71,7 @@
         },
         {
           "label": "+2",
-          "value": 18.06
+          "value": 18.45
         }
       ]
     }
