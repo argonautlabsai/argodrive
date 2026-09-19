@@ -133,73 +133,20 @@ runs correctly and simply sees no split.
 
 [**Download ARGODRIVE for Apple silicon**](https://github.com/argonautlabsai/argodrive/releases/tag/v0.2.0-beta.3) · [**Installation and testing guide**](https://github.com/argonautlabsai/argodrive/blob/beta-20260914/docs/BETA-TESTING.md) · [**Beta source**](https://github.com/argonautlabsai/argodrive/tree/beta-20260914)
 
-Open Live Hardware to check connected drives, memory and activity. Choose a folder of supported benchmark runs to inspect results and compare configurations. Report launch, drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues). Review any attachments for private paths and prompts before sharing.
+Open Live Hardware to check connected drives, memory and activity. Choose a folder of
+supported benchmark runs to inspect results and compare configurations. Report launch,
+drive-discovery or chart issues [on GitHub](https://github.com/argonautlabsai/argodrive/issues).
+Review any attachments for private paths and prompts before sharing.
 
 This is a monitoring and saved-run analysis preview, not an automatic optimizer, and it does
 not include model weights. The beta is ad-hoc signed and not notarized; see the testing guide
-before installing. The app already has the test and tune steps of the guided test → tune →
-validate → save-settings workflow: a Monitor → Test setup dialog that starts a short
-inference run, and a Benchmark tab (drive calibration and a streaming recommendation). The
-validation, export and apply-settings steps are the next product milestone and are not yet
-in the downloadable app — see the [streaming optimiser plan](docs/STREAMING-OPTIMIZER.md).
+before installing.
 
-```sh
-# Review saved runs without starting a hardware sampler
-./argodrive run --reports-only --runs /path/to/arms
-```
+## Legacy Deltafin tools and recorded charts
 
-Open http://localhost:8130 (the `./argodrive run` default port; the packaged app starts its
-backend on a free port and opens it in its own window). Use Settings to validate or change
-the run folder. See the [dashboard guide](docs/DASHBOARD.md) for metric definitions, or
-[development setup](docs/BETA-DEVELOPMENT.md) for live collection. Python 3.10+ is required;
-the UI has no runtime package dependencies. A self-contained Apple-silicon technical preview
-can be built with [scripts/build-macos.py](scripts/build-macos.py); see
-[Mac beta release instructions](docs/MAC-BETA-RELEASE.md).
+The original Deltafin-specific research toolkit and its historical measurements are retained below. These charts are Kimi/Deltafin recordings, not DeepSeek V4.1 results.
 
-## Model support in the local Beta 3 build
-
-| Model family | Engine | Current scope |
-|---|---|---|
-| Kimi K3 | Deltafin | Recorded-run analysis and streaming evidence |
-| GLM 5.3 | Argonaut ds4 fork | Recorded runs, candidate profiles and qualified campaign evidence |
-| DeepSeek V4.1 Flash | Argodrive ds4 fork · Metal | Experimental four-drive profile and recorded qualification evidence |
-
-The current V4.1 evidence is a single-machine qualification on an M5 Max with
-the internal SSD plus three verified replicas, split 10:6:6:4 by measured read
-speed, measured against the pinned upstream engine (`bd66c40`) on the internal
-SSD alone. Both sides produce the same output SHA-256, so the comparison is
-like-for-like rather than a storage-layout screen:
-
-| 512 prompt / 200 generated | upstream, one drive | Argodrive, four drives |
-| --- | ---: | ---: |
-| prompt processing | 16.28 tok/s | 44.50 tok/s (2.7x) |
-| generation | 10.04 tok/s | 16.27 tok/s (1.6x) |
-
-The prompt-processing gain is the 2026-09-15 prefill work: prefill had been
-reading every routed expert through the memory map of the primary file, so one
-drive carried it, and the layer-major sweep read all 384 experts of each layer
-where a 512-token prompt routes to 187. The generation gain is not that change;
-it comes from decode replica streaming and a larger expert cache.
-
-It is not a general speed guarantee, and the packaged app does not launch
-inference automatically. The GLM fork's replica settings are not available in
-the fresh upstream engine. See [V4.1 preparation and test
-procedure](docs/DEEPSEEK41.md).
-
-## Product direction
-
-First, turn SSD calibration and model-specific streaming experiments into a
-guided workflow on one Mac. Compare supported read methods, per-drive work
-allocation, reader concurrency, prefetch and expert-cache budgets using real
-inference runs. The dashboard is the interface for this workflow and its evidence.
-
-Then extend the same model to multiple Macs, local and remote expert RAM caches,
-and SSDs. Cluster management, RDMA and peer-cache execution are planned
-capabilities, not implemented features.
-
-See [the product direction and staged architecture](docs/PRODUCT-DIRECTION.md).
-
-## Original research instruments
+# ArgoDrive tools
 
 Measurement instruments for SSD-streamed mixture-of-experts inference. These
 are the tools that found every gain in the ArgoDrive Deltafin benchmark
@@ -242,8 +189,7 @@ the chart script in the benchmark package
 | directory | tool | what it does |
 |---|---|---|
 | `monitor/` | `k3-diskscope.c` | 100 ms sampler of per-device read bytes and ops, RAM, CPU and GPU counters, to CSV. `cc -O2 -o k3-diskscope k3-diskscope.c -framework IOKit -framework CoreFoundation` |
-| `monitor/` | `k3-live.py` | local web dashboard (port 8130 from `./argodrive run`; a free port in the packaged app): live per-drive throughput, arm history with same-length deltas, by-layer barrier report from a per-read trace, CSV exports |
-| `monitor/` | `app.js` (Monitor → Chart layers → Advanced) | milliseconds per read, reads in flight, duty cycle and read size per drive, from IOKit completed-read statistics. Throughput charts cannot explain why another drive helps when the workload uses 19% of the available bandwidth; a split read completes when its slowest slice does, and this view shows that slice shrinking |
+| `monitor/` | `k3-live.py` | local web dashboard on port 8130: live per-drive throughput, arm history with same-length deltas, by-layer barrier report from a per-read trace, CSV exports |
 | `monitor/` | `k3-memsample.sh` | one line per second of macOS memory truth (used / available / wired / swap) |
 | `harness/` | `k3-arm.sh`, `k3-arm-inner.sh`, `k3-measure.sh` | one measured arm: the configuration of record as environment, cold start enforced, swap guard, device map recorded, sampler and memory log per arm, text-identity check |
 | `harness/` | `k3-pressure.c` | memory-pressure step before an arm (records what preceded each measurement) |
@@ -253,8 +199,6 @@ the chart script in the benchmark package
 | `drives/` | `k3-drive-map.py`, `k3-drive-names.example.json` | which physical drive is which — model, serial, whole-disk, bus, direct port or hub — and drift against the last snapshot; run after any replug |
 | `placement/` | `k3-regen-manifests.py` | regenerate and verify placement manifests from the live directories |
 | `placement/` | `k3-stage-wider-bands.py` | widen replica bands by traffic share from a usage trace, with a manifest and rollback script per band |
-| `monitor/` / `scripts/` | `ds41_placement.py` / `ds41-placement.py` | parse DeepSeek router traces, map GGUF expert spans, generate Deltafin-style usage-weighted manifests, and qualify matched A/B records |
-| `scripts/` | `kimi-deltafin-profile.py` | print the Deltafin Kimi replica/ETA candidate and verify path filesystem identities without changing model data |
 
 ## How they were used
 
@@ -267,27 +211,12 @@ dashboard server stopped (its sampler costs about one percent). Read traces
 `k3-trace-gaps.py` and the dashboard's by-layer view, never used for speed
 figures. Drive ceilings were measured with the engine idle.
 
-## Current implementation boundary
+## What these tools are not
 
-The local **0.2.0-beta.3** build adds an experimental Cluster tab with saved M1
-qualification evidence, plus native one-link expert transfer tools. A real
-Thunderbolt run verified 1,000 requests against a 200-record K3 sample at
-1.30 GB/s of transfer time. This is a transport result, not a decode speedup.
-Multipath, remote RAM caching, RDMA and ds4 integration remain unimplemented.
-See [wire/README.md](wire/README.md) and [wire/BENCH.md](wire/BENCH.md).
-
-The packaged app monitors and compares measurements. The separate research
-scripts can test reads, run configured benchmark arms and prepare expert replicas;
-many still assume the reference machine's paths and deltafin's `K3_*` settings.
-They need adaptation before use on another setup.
-
-The engine performs the actual expert reads and scheduling. The generated
-DeepSeek manifests are advisory until the ds4 fork explicitly consumes them;
-the current three-drive runner still uses its explicit split-reader settings.
-ARGODRIVE's next step is to select, test and export settings through versioned engine adapters.
-An integrated automatic tuner and runtime adaptation to changing load are not
-implemented yet. A standalone SSD result alone does not establish the fastest
-inference configuration.
+They are not a product and not general-purpose: the sampler and the harness
+assume macOS, the deltafin engine's log format and its `K3_*` environment
+knobs. Nothing here schedules reads or changes the engine; these are
+instruments only.
 
 ## Development acknowledgements
 
