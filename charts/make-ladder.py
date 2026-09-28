@@ -22,14 +22,14 @@ def chart(data, dark=False):
             if v is not None:
                 bars.append((label, v, accents[i], False))
         rows.append((metric, unit, bars))
-    H = top + sum(panel_h for _ in rows) + 46
+    H = top + sum(panel_h for _ in rows) + 62
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
            f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">',
            f'<rect width="{W}" height="{H}" fill="{bg}"/>',
            f'<text x="{pad_l}" y="30" font-size="18" font-weight="700" fill="{fg}">'
            f'DeepSeek V4.1-Flash Q4 (518 GB) streamed from SSD — M5 Max, 128 GB</text>',
            f'<text x="{pad_l}" y="48" font-size="12.5" fill="{muted}">'
-           f'512-token prompt, 200 generated · every arm byte-identical output SHA-256 · higher is better</text>']
+           f'512-token prompt, 200 generated · one session, 27 September 2026 · every arm byte-identical output SHA-256 · higher is better</text>']
     y = top
     for metric, unit, bars in rows:
         mx = max(v for _, v, _, _ in bars) * 1.34
@@ -50,9 +50,11 @@ def chart(data, dark=False):
                            f'fill="{colour}">{gain:.2f}×</text>')
             by += 36
         y += panel_h
-    out.append(f'<text x="{pad_l}" y="{H-16}" font-size="11.5" fill="{muted}">'
-               f'Upstream control: pinned ds4 bd66c40 on the internal SSD, median of four interleaved arms. '
-               f'“+1 / +2 external” add byte-identical replicas of the 518 GB file.</text>')
+    out.append(f'<text x="20" y="{H-32}" font-size="11.5" fill="{muted}">'
+               f'Upstream control: pinned ds4 bd66c40 on the internal SSD, median of six arms interleaved with the fork rungs (two each); '
+               f'+1 / +2 external add byte-identical replicas of the 518 GB file.</text>')
+    out.append(f'<text x="20" y="{H-16}" font-size="11.5" fill="{muted}">'
+               f'Fork rungs run profile v41-stack-20260927 (flag readback, 4,600-expert cache, fused BF16 epilogues); the internal-only rung uses no replicas at all.</text>')
     out.append('</svg>')
     return '\n'.join(out)
 

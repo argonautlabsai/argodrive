@@ -6,27 +6,29 @@ not how much bandwidth you own but how long the slowest required read takes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/drives-ladder-dark.svg">
-  <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: 14.38, 16.05, 18.45 (1.28x). Output identical at every rung.">
+  <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: upstream ds4 10.18 on the internal SSD; our fork 18.66 on the same SSD (1.83x), 21.05 with one external (2.07x), 22.25 with two (2.19x), one interleaved session on 2026-09-27. Output identical at every rung.">
 </picture>
 
 Three models, three forks, one method: the trunk stays in memory, the routed experts stream
 from NVMe, and every expert read is split across byte-identical replicas on however many
 drives are attached. Kimi K3 (2.78T) goes from 0.55 to 0.96 tok/s, GLM-5.3 (744B) from 2.02
-to 3.70, DeepSeek V4.1-Flash from 14.38 to 18.45, with the same output at every rung.
+to 3.70, DeepSeek V4.1-Flash from 18.66 on one drive to 22.25 on three (against upstream ds4 at 10.18 on the same drive), with the same output at every rung.
 
 ## What it has done
 
 | model | engine | baseline | best measured | gain |
 |---|---|---|---|--:|
-| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 16.50 / 10.44 (vs our one-drive) · 16.23 / 10.61 (vs our three-drive) | one drive, no replicas: **28.04 / 14.38** · three drives: **43.62 / 18.45** | **1.74× / 2.69×** |
+| DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 17.96 / 10.18 (prompt processing / steady decode, median of six arms in the same session) | one drive, no replicas: **30.98 / 18.66** · three drives: **42.41 / 22.25** | **1.83× / 2.36×** (three drives: decode / prefill); **1.83× / 1.72×** on one drive |
 | GLM-5.3, 744B (434 GB at 4-bit) | ds4 fork | our fork, one drive: 2.02 | four drives: **3.70** · with the scheduling patch **4.21** at 128 tokens | **1.8×** · **2.1×** |
 | Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
 
 All on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
-number. The V4.1 row compares against the **pinned upstream ds4 binary** (`bd66c40`),
-re-measured 2026-09-15 on the branch exactly as it ships, with a **byte-identical output
-SHA-256 on every arm**. The one-drive and three-drive comparisons were separate interleaved
-sessions, each with its own upstream control, which is why two baselines are quoted. The GLM and K3 rows are our own software scaling from one drive
+number. The V4.1 row compares against the **pinned upstream ds4 binary** (`bd66c40`, the base the
+fork is built on, compiled with the same toolchain), measured 2026-09-27 in one interleaved session
+with the fork's `v41-stack-20260927` profile on one, two and three drives, with a **byte-identical
+output SHA-256 on every arm**; upstream is the median of six arms, each fork rung the median of two.
+A 28 September profile (post-MoE flush, eviction pre-scan) adds 1.5% on top at 512/512 against our
+own 27 September binary and is not re-run against upstream. The GLM and K3 rows are our own software scaling from one drive
 to four, which is a storage result, not an engine comparison. GLM is 200-token generation;
 K3 is the public 17-token prompt, a median of three runs at every rung. V4.1 is a 512-token
 prompt with 200 generated, medians of interleaved pairs.
@@ -76,16 +78,18 @@ the branch.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-dark.svg">
-  <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max. Prompt processing: upstream ds4 on the internal SSD 16.23 tok/s; our fork 28.04 on the same single drive (1.73x), 36.88 with one external (2.27x), 43.62 with two (2.69x). Steady decode: upstream 10.59; our fork 14.38 (1.36x), 16.05 (1.52x), 18.45 (1.74x).">
+  <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max, one interleaved session on 2026-09-27. Prompt processing: upstream ds4 on the internal SSD 17.96 tok/s; our fork 30.98 on the same single drive (1.72x), 36.88 with one external (2.05x), 42.41 with two (2.36x). Steady decode: upstream 10.18; our fork 18.66 (1.83x), 21.05 (2.07x), 22.25 (2.19x).">
 </picture>
 
 **The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
 of every routed layer, but a 512-token chunk only routes to 187 of 384 — so it reads about
-twice what the model touches. Fixing that alone is worth **1.73× prompt processing on one
-internal SSD**, no replicas involved. Drives after that just shrink each split read further.
+twice what the model touches. Fixing that alone is worth **1.72× prompt processing on one
+internal SSD**, no replicas involved, and the decode-side work of September (flag readback of the
+router ids, a larger expert cache, fused rounding) makes the same single drive **1.83× upstream on
+steady decode**. Drives after that just shrink each split read further.
 
-Every bar is a median of interleaved arms against pinned upstream `bd66c40`, all with the
-same output SHA-256.
+Every bar comes from one interleaved session against pinned upstream `bd66c40` (upstream the median
+of six arms, each fork rung the median of two), all with the same output SHA-256.
 
 ## What the instruments show
 

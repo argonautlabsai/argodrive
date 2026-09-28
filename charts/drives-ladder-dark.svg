@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 482" width="1000" height="482" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect width="1000" height="482" fill="#0d1017"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 498" width="1000" height="498" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="1000" height="498" fill="#0d1017"/>
 <text x="30" y="30" font-size="18" font-weight="700" fill="#e6e8ee">Decode speed by drive count, our forks — MacBook Pro M5 Max, 128 GB</text>
 <text x="30" y="48" font-size="12.5" fill="#9aa1b2">steady decode tok/s · one drive = the internal SSD; +1 / +2 / +3 add Thunderbolt 5 NVMe enclosures holding byte-identical replicas · output identical at every rung</text>
 <text x="30.0" y="88" font-size="14" font-weight="700" fill="#e6e8ee">Kimi K3 · 2.78T · 1.44 TB</text>
@@ -57,29 +57,30 @@
 <text x="679.3333333333334" y="88" font-size="14" font-weight="700" fill="#e6e8ee">DeepSeek V4.1-Flash · 552B · 518 GB</text>
 <text x="679.3333333333334" y="104" font-size="11.5" fill="#9aa1b2">384 experts, 6 active per token · upstream = pinned ds4 bd66c40 on the same single drive</text>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#1a1f2b"/>
-<rect x="693.1" y="229.5" width="45.1" height="143.1" rx="22.5" fill="#6b7280"/>
+<rect x="693.1" y="253.9" width="45.1" height="118.6" rx="22.5" fill="#6b7280"/>
 <rect x="692.1" y="351" width="47.1" height="24.5" fill="#0d1017"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#1a1f2b"/>
-<text x="715.7" y="221.5" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">10.59</text>
+<text x="715.7" y="245.9" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">10.18</text>
 <text x="715.7" y="370" font-size="12" text-anchor="middle" fill="#9aa1b2">upstream</text>
-<rect x="765.8" y="186.3" width="45.1" height="186.2" rx="22.5" fill="#6f7ee4"/>
+<rect x="765.8" y="173.9" width="45.1" height="198.6" rx="22.5" fill="#6f7ee4"/>
 <rect x="764.8" y="351" width="47.1" height="24.5" fill="#0d1017"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#1a1f2b"/>
-<text x="788.3" y="178.3" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">14.38</text>
-<text x="788.3" y="162.3" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.36×</text>
+<text x="788.3" y="165.9" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">18.66</text>
+<text x="788.3" y="149.9" font-size="12" font-weight="600" text-anchor="middle" fill="#6f7ee4">1.83×</text>
 <text x="788.3" y="370" font-size="12" text-anchor="middle" fill="#e6e8ee">1 drive</text>
-<rect x="838.5" y="167.3" width="45.1" height="205.2" rx="22.5" fill="#8c82f0"/>
+<rect x="838.5" y="151.3" width="45.1" height="221.2" rx="22.5" fill="#8c82f0"/>
 <rect x="837.5" y="351" width="47.1" height="24.5" fill="#0d1017"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#1a1f2b"/>
-<text x="861.0" y="159.3" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">16.05</text>
-<text x="861.0" y="143.3" font-size="12" font-weight="600" text-anchor="middle" fill="#8c82f0">1.52×</text>
+<text x="861.0" y="143.3" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">21.05</text>
+<text x="861.0" y="127.3" font-size="12" font-weight="600" text-anchor="middle" fill="#8c82f0">2.07×</text>
 <text x="861.0" y="370" font-size="12" text-anchor="middle" fill="#e6e8ee">+1</text>
 <rect x="911.1" y="140.0" width="45.1" height="232.5" rx="22.5" fill="#a394f7"/>
 <rect x="910.1" y="351" width="47.1" height="24.5" fill="#0d1017"/>
 <rect x="679.3333333333334" y="350" width="290.7" height="2" rx="1" fill="#1a1f2b"/>
-<text x="933.7" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">18.45</text>
-<text x="933.7" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#a394f7">1.74×</text>
+<text x="933.7" y="132.0" font-size="13.5" font-weight="700" text-anchor="middle" fill="#e6e8ee">22.25</text>
+<text x="933.7" y="116.0" font-size="12" font-weight="600" text-anchor="middle" fill="#a394f7">2.19×</text>
 <text x="933.7" y="370" font-size="12" text-anchor="middle" fill="#e6e8ee">+2</text>
 <text x="30" y="454" font-size="11.5" fill="#9aa1b2">Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08). GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).</text>
-<text x="30" y="470" font-size="11.5" fill="#9aa1b2">DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15; three-drive decode 2026-09-19 with the GPU keep-alive, decode split 10:6:6 and CPU keep-alive);</text>
+<text x="30" y="470" font-size="11.5" fill="#9aa1b2">DeepSeek V4.1-Flash: ds4 fork (profile v41-stack-20260927) vs pinned upstream bd66c40, 512-token prompt + 200 generated, one interleaved session (2026-09-27).</text>
+<text x="30" y="486" font-size="11.5" fill="#9aa1b2">Upstream median of six arms, each fork rung median of two; the 1-drive rung uses no replicas; output identical on every arm.</text>
 </svg>

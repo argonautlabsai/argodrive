@@ -5,8 +5,9 @@
   "footnote": [
     "Kimi K3: deltafin fork, public 17-token prompt, median of three runs per rung (2026-09-08).",
     "GLM-5.3: ds4 fork, 200 generated tokens, interleaved pairs (2026-09-10).",
-    "DeepSeek V4.1-Flash: ds4 fork vs pinned upstream, 512-token prompt + 200 generated, medians of interleaved pairs (2026-09-15);",
-    "three-drive decode 18.45 with the GPU keep-alive (2026-09-17) and the decode split 10:6:6 + CPU keep-alive (2026-09-19); four interleaved pairs each, output identical."
+    "DeepSeek V4.1-Flash: ds4 fork (profile v41-stack-20260927) vs pinned upstream bd66c40, 512-token prompt + 200 generated,",
+    "one interleaved session on 2026-09-27: upstream median of six arms, fork rungs median of two; output identical on all twelve arms.",
+    "The 28 September profile (post-MoE flush, eviction pre-scan) adds 1.5% at 512/512 (22.92 → 23.26); not re-run against upstream."
   ],
   "panels": [
     {
@@ -61,23 +62,23 @@
       "bars": [
         {
           "label": "upstream ds4, internal SSD",
-          "value": 10.59,
+          "value": 10.18,
           "base": true
         },
         {
           "label": "our fork, internal SSD only",
-          "value": 14.38
+          "value": 18.66
         },
         {
           "label": "+1 external",
-          "value": 16.05
+          "value": 21.05
         },
         {
-          "label": "+2 external, keep-alives + split",
-          "value": 18.45
+          "label": "+2 external",
+          "value": 22.25
         }
       ]
     }
   ],
-  "pad_left": 160
+  "pad_left": 250
 }
