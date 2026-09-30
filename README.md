@@ -81,6 +81,19 @@ the branch.
   <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max, one interleaved session on 2026-09-27. Prompt processing: upstream ds4 on the internal SSD 17.96 tok/s; our fork 30.98 on the same single drive (1.72x), 36.88 with one external (2.05x), 42.41 with two (2.36x). Steady decode: upstream 10.18; our fork 18.66 (1.83x), 21.05 (2.07x), 22.25 (2.19x).">
 </picture>
 
+**30 September, prefill.** Read-ahead staging (the next layer's likeliest experts are read while the GPU computes the
+current one, ranked by a hotlist built from other prompts) and a two-wave routed MoE lift prompt processing to
+**43.75 tok/s on one drive** (2.71× upstream) and **68.29 with two enclosures** (4.24×),
+qualified against our 28 September binary at +50.6% (512/512) and +49.6% (512/200) with byte-identical output
+and decode unchanged. That session ran the fork rungs at a 3,600-expert cache (the 4,600 cache tripped the swap guard
+on an un-rebooted machine), so its decode rungs sit below the chart above, which stays the decode reference.
+[Qualification package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20260930/argodrive/candidates/2026-09-30-prefill/README.md) · [Ladder package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20260930/argodrive/candidates/2026-09-30-ladder/README.md)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-prefill-dark.svg">
+  <img src="charts/ladder-prefill.svg" alt="DeepSeek V4.1-Flash Q4 with the 30 September prefill profile, one interleaved session against pinned upstream. Prompt processing: upstream 16.12 tok/s on the internal SSD; our fork 43.75 on the same single drive, 58.13 with one external, 68.29 with two. Steady decode at a 3,600-expert cache: 10.11, 16.77, 18.67, 20.02.">
+</picture>
+
 **The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
 of every routed layer, but a 512-token chunk only routes to 187 of 384 — so it reads about
 twice what the model touches. Fixing that alone is worth **1.72× prompt processing on one
