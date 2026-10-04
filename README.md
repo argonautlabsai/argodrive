@@ -81,17 +81,18 @@ the branch.
   <img src="charts/ladder.svg" alt="DeepSeek V4.1-Flash Q4 streamed from SSD on an M5 Max, one interleaved session on 2026-09-27. Prompt processing: upstream ds4 on the internal SSD 17.96 tok/s; our fork 30.98 on the same single drive (1.72x), 36.88 with one external (2.05x), 42.41 with two (2.36x). Steady decode: upstream 10.18; our fork 18.66 (1.83x), 21.05 (2.07x), 22.25 (2.19x).">
 </picture>
 
-**30 September, prefill.** Read-ahead staging (the next layer's likeliest experts are read while the GPU computes the
-current one, ranked by a hotlist built from other prompts) and a two-wave routed MoE lift prompt processing to
-**43.75 tok/s on one drive** (2.71× upstream) and **68.29 with two enclosures** (4.24×),
-qualified against our 28 September binary at +50.6% (512/512) and +49.6% (512/200) with byte-identical output
-and decode unchanged. That session ran the fork rungs at a 3,600-expert cache (the 4,600 cache tripped the swap guard
-on an un-rebooted machine), so its decode rungs sit below the chart above, which stays the decode reference.
-[Qualification package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20260930/argodrive/candidates/2026-09-30-prefill/README.md) · [Ladder package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20260930/argodrive/candidates/2026-09-30-ladder/README.md)
+**4 October, prefill.** On top of the 30 September read-ahead staging: a continuous prefill reader, Engram
+row-table reads on upstream's prefetch thread from the first layer, and a conditional read-ahead prior (how often an
+expert at one layer followed each expert of the previous layer in 19 other prompts, applied to the prompt's own
+routing). Prompt processing **47.71 tok/s on one drive** (2.76× upstream) and **75.06 with two enclosures**
+(4.34×), qualified against our 30 September binary at +6.4% (512/512) and +6.5% (512/200) with
+byte-identical output. Fork rungs again at a 3,600-expert cache (see the 30 September note above), so the decode rungs sit
+below the first chart, which stays the decode reference. The 30 September session measured 16.12 / 43.75 / 58.13 / 68.29.
+[Qualification package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20261004/argodrive/candidates/2026-10-04-engram/README.md) · [Ladder package](https://github.com/argonautlabsai/ds4-argodrive/blob/v41-stack-20261004/argodrive/candidates/2026-10-04-ladder/README.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/ladder-prefill-dark.svg">
-  <img src="charts/ladder-prefill.svg" alt="DeepSeek V4.1-Flash Q4 with the 30 September prefill profile, one interleaved session against pinned upstream. Prompt processing: upstream 16.12 tok/s on the internal SSD; our fork 43.75 on the same single drive, 58.13 with one external, 68.29 with two. Steady decode at a 3,600-expert cache: 10.11, 16.77, 18.67, 20.02.">
+  <img src="charts/ladder-prefill.svg" alt="DeepSeek V4.1-Flash Q4 with the 4 October prefill profile, one interleaved session against pinned upstream. Prompt processing: upstream 17.30 tok/s on the internal SSD; our fork 47.71 on the same SSD, 62.99 with one enclosure, 75.06 with two. Steady decode: 10.17 upstream; 16.94, 18.64, 19.31 for the fork at a 3,600-expert cache.">
 </picture>
 
 **The first fork row needs no extra hardware.** Upstream's prefill sweep reads every expert
