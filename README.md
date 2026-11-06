@@ -1,15 +1,19 @@
 # ARGODRIVE
 
 **Layout, balancer and instruments for running mixture-of-experts models from SSDs.**
-Models of 518 GB to 1.44 TB on a 128 GB laptop: every token waits on disk, so what matters is
-not how much bandwidth you own but how long the slowest required read takes.
+Models of 518 GB to 1.45 TB on a 128 GB laptop or one 96 GB GPU: every token waits on disk, so what
+matters is not how much bandwidth you own but how long the slowest required read takes.
+
+The newest result is **Kimi K3.1 Pro (2.8T) on one 96 GB GPU**: about 2 tok/s decode, and prefill from
+10.6 tok/s on a 270-token prompt up to 41 tok/s on a 1,533-token one, with 1.45 TB of experts streamed
+from three NVMe drives. Code and numbers: [`argodrive-ds4-kimi-k3.1`](https://github.com/argonautlabsai/argodrive-ds4-kimi-k3.1).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/drives-ladder-dark.svg">
   <img src="charts/drives-ladder.svg" alt="Steady decode speed by drive count for our forks on an M5 Max, 128 GB. Kimi K3 (2.78T): 0.55 tok/s on the internal SSD, 0.75 with one external enclosure, 0.89 with two, 0.96 with three (1.75x). GLM-5.3 (744B): 2.02, 2.44, 2.90, 3.70 (1.83x). DeepSeek V4.1-Flash: upstream ds4 10.18 on the internal SSD; our fork 18.66 on the same SSD (1.83x), 21.05 with one external (2.07x), 22.25 with two (2.19x), one interleaved session on 2026-09-27. Output identical at every rung.">
 </picture>
 
-Three models, three forks, one method: the trunk stays in memory, the routed experts stream
+On the M5 Max: three models, three forks, one method. The trunk stays in memory, the routed experts stream
 from NVMe, and every expert read is split across byte-identical replicas on however many
 drives are attached. Kimi K3 (2.78T) goes from 0.55 to 0.96 tok/s, GLM-5.3 (744B) from 2.02
 to 3.70, DeepSeek V4.1-Flash from 18.66 on one drive to 22.25 on three (against upstream ds4 at 10.18 on the same drive), with the same output at every rung.
@@ -18,11 +22,12 @@ to 3.70, DeepSeek V4.1-Flash from 18.66 on one drive to 22.25 on three (against 
 
 | model | engine | baseline | best measured | gain |
 |---|---|---|---|--:|
+| Kimi K3.1 Pro, 2.8T, 1.45 TB of experts | ds4 with CUDA, [`argodrive-ds4-kimi-k3.1`](https://github.com/argonautlabsai/argodrive-ds4-kimi-k3.1) | none: one RTX PRO 6000 96 GB, three NVMe | decode **2.04** tok/s at 128 tokens, 1.94 at 512; prefill 10.6 tok/s at 270 tokens, **41** at 1,533 | n/a |
 | DeepSeek V4.1-Flash Q4, 518 GB on disk | ds4 fork | **upstream ds4**, one drive: 17.96 / 10.18 (prompt processing / steady decode, median of six arms in the same session) | one drive, no replicas: **30.98 / 18.66** · three drives: **42.41 / 22.25** | **1.83× / 2.36×** (three drives: decode / prefill); **1.83× / 1.72×** on one drive |
 | GLM-5.3, 744B (434 GB at 4-bit) | ds4 fork | our fork, one drive: 2.02 | four drives: **3.70** · with the scheduling patch **4.21** at 128 tokens | **1.8×** · **2.1×** |
 | Kimi K3, 2.78T | deltafin fork | our fork, one drive: 0.55 | four drives: **0.96** | **1.8×** |
 
-All on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
+The K3.1 row is on one RTX PRO 6000 (96 GB) and has no baseline to compare with. The others are all on an M5 Max, 128 GB. Read the baselines carefully, because they are not the same kind of
 number. The V4.1 row compares against the **pinned upstream ds4 binary** (`bd66c40`, the base the
 fork is built on, compiled with the same toolchain), measured 2026-09-27 in one interleaved session
 with the fork's `v41-stack-20260927` profile on one, two and three drives, with a **byte-identical
@@ -41,6 +46,28 @@ gets that. The three-drive column adds weighted split reads across internal + tw
 
 Time to first token on a 512-token prompt, which is the question everyone asks next:
 **31.5 s → 18.3 s on one drive → 11.7 s on three.**
+
+### Kimi K3.1 Pro, on one GPU
+
+Measured on 6 November on one RTX PRO 6000 Blackwell (96 GB) in a 70 GiB VM, with the Q8_0 spine in VRAM and the
+1.45 TB of MXFP4 experts streamed per token from a RAID0 of three NVMe drives (19 GB/s), a second NVMe (6.2 GB/s) and a
+Thunderbolt NVMe (3.7 GB/s). No drafter, no expert skipping.
+
+| | |
+|---|---|
+| decode, 128 generated tokens | 2.04 tok/s |
+| decode, 512 generated tokens | 1.94 tok/s |
+| decode, 200 tokens after a 270-token chat prompt | 1.93–1.96 tok/s |
+| prompt pass, 270 tokens | 25 s (10.6 tok/s) |
+| prompt pass, 618 tokens | 32 s (19.5 tok/s) |
+| prompt pass, 1,533 tokens | 37 s (41 tok/s) |
+
+Past a few hundred tokens a prompt routes to most experts of every layer, so the prompt pass reads most of the model once
+at the drives' combined 37 GB/s and the time barely changes with length. The caches and read scheduling don't change what
+gets computed and a given setup repeats exactly, but different arithmetic paths can flip near-tie tokens. The DSA indexer
+isn't implemented, so dense attention stands in for it within 2,048 tokens of context. We haven't compared any of this with
+Moonshot's own implementation. Code, protocol and every caveat:
+[`argonautlabsai/argodrive-ds4-kimi-k3.1`](https://github.com/argonautlabsai/argodrive-ds4-kimi-k3.1/blob/kimi-k3/tools/kimi-k3/README.md).
 
 ### Kimi K3, the 2.78T model
 
