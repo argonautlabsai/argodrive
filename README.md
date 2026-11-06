@@ -49,7 +49,7 @@ Time to first token on a 512-token prompt, which is the question everyone asks n
   <img src="charts/k3-ladder.svg" alt="Kimi K3 at 4-bit streamed from SSD on an M5 Max. Steady decode by drive count: internal SSD only 0.55 tok/s, plus one external 0.75, plus two 0.89, plus three 0.96 (1.75x). Public 17-token prompt, median of three runs per rung.">
 </picture>
 
-The largest of the three: 1.44 TB of 4-bit experts, 384 experts with 8 active per token, run
+The largest of the three: 1.44 TB of 4-bit experts, 896 experts per layer with 16 active per token, run
 by our `deltafin` fork. The ladder is the public 17-token prompt, a median of three runs at
 every rung, output identical throughout. On four drives it holds **1.00 tok/s steady over 512
 generated tokens** and 1.13 over 128. Prefill is the cost at this size: a 512-token prompt
