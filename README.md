@@ -1,3 +1,5 @@
+<p align="center"><a href="https://argonautlabs.ai/"><img src="docs/branding/argonaut-labs.svg" width="112" alt="Argonaut Labs"></a></p>
+
 # ARGODRIVE
 
 **Layout, balancer and instruments for running mixture-of-experts models from SSDs.**
