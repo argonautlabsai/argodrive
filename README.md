@@ -6,9 +6,9 @@
 Models of 518 GB to 1.45 TB on a 128 GB laptop or one 96 GB GPU: every token waits on disk, so what
 matters is not how much bandwidth you own but how long the slowest required read takes.
 
-The newest result is **Kimi K3.1 Pro (2.8T) on one 96 GB GPU**: about 2 tok/s decode, and prefill from
-10.6 tok/s on a 270-token prompt up to 41 tok/s on a 1,533-token one, with 1.45 TB of experts streamed
-from three NVMe drives. Code and numbers: [`argodrive-ds4-kimi-k3.1`](https://github.com/argonautlabsai/argodrive-ds4-kimi-k3.1).
+The latest published Kimi result (7 November 2026) is **Kimi K3.1 Pro (2.8T) on one 96 GB GPU**: 3.11 tok/s decode on predictable raw text with a Qwen drafter, and up to 44 tok/s prefill on a 1,512-token prompt. Chat reached 2.01–2.02 tok/s. The tested machine streams 1.45 TB of experts from five physical NVMe devices across three storage tiers. The published benchmark profile has a 2,048-token total context limit; reference-model equivalence remains unvalidated.
+
+[Run Kimi 3.1 locally on one GPU: setup, measurements and limits](https://argonautlabs.ai/research/kimi-k31-single-gpu.html) · [CUDA engine code](https://github.com/argonautlabsai/argodrive-ds4-kimi-k3.1). The CUDA engine is a separate project and does not require the Argodrive Mac app.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="charts/drives-ladder-dark.svg">
